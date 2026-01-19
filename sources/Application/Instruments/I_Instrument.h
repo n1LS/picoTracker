@@ -39,8 +39,10 @@ protected:
 
 public:
   I_Instrument(etl::ilist<Variable *> *list,
-               const char *nodeName = "INSTRUMENT")
-      : VariableContainer(list), Persistent(nodeName){};
+               const char *nodeName = "INSTRUMENT",
+               bool registerWithPersistence = false)
+      : VariableContainer(list),
+        Persistent(nodeName, registerWithPersistence){};
   virtual ~I_Instrument();
 
   // Initialisation routine
@@ -105,7 +107,7 @@ public:
 
   virtual void ProcessCommand(int channel, FourCC cc, ushort value) = 0;
 
-  virtual void Purge() = 0;
+  virtual void Purge();
 
   virtual int GetTable() = 0;
   virtual bool GetTableAutomation() = 0;

@@ -30,6 +30,7 @@
 #include "Application/Views/ProjectView.h"
 #include "Application/Views/RecordView.h"
 #include "Application/Views/SampleEditorView.h"
+#include "Application/Views/SampleSlicesView.h"
 #include "Application/Views/SelectProjectView.h"
 #include "Application/Views/SongView.h"
 #include "Application/Views/TableView.h"
@@ -41,6 +42,7 @@
 #include "Services/Midi/MidiService.h"
 #include "System/Console/Trace.h"
 #include "System/FileSystem/FileSystem.h"
+#include "System/System/System.h"
 #include "UIFramework/Interfaces/I_GUIWindowFactory.h"
 #include "Views/UIController.h"
 #include "platform.h"
@@ -130,6 +132,7 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
   _tableView = 0;
   _mixerView = 0;
   _sampleEditorView = 0;
+  _sampleSlicesView = 0;
   _recordView = 0;
   _nullView = 0;
   _grooveView = 0;
@@ -139,6 +142,8 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
   _mask = 0;
   lowBatteryMessageShown_ = false;
   lowBatteryWarningCounter_ = 0;
+  sdCardMissing_ = false;
+  sdCardMessageShown_ = false;
 
   EventDispatcher *ed = EventDispatcher::GetInstance();
   ed->SetWindow(this);
@@ -172,6 +177,20 @@ AppWindow::AppWindow(I_GUIWindowImp &imp) : GUIWindow(imp) {
 };
 
 AppWindow::~AppWindow() { MidiService::GetInstance()->Close(); }
+
+void AppWindow::SetSdCardPresent(bool present) {
+  sdCardMissing_ = !present;
+  if (!present) {
+    sdCardMessageShown_ = false;
+  }
+  SetDirty();
+}
+
+void appwindow_set_sdcard_present(bool present) {
+  if (instance) {
+    instance->SetSdCardPresent(present);
+  }
+}
 
 void AppWindow::DrawString(const char *string, GUIPoint &pos,
                            GUITextProperties &props, bool force) {
@@ -482,6 +501,12 @@ AppWindow::LoadProjectResult AppWindow::LoadProject(const char *projectName) {
       new (sampleEditorViewMemBuf) SampleEditorView((*this), _viewData);
   _sampleEditorView->AddObserver((*this));
 
+  alignas(SampleSlicesView) static char
+      sampleSlicesViewMemBuf[sizeof(SampleSlicesView)];
+  _sampleSlicesView =
+      new (sampleSlicesViewMemBuf) SampleSlicesView((*this), _viewData);
+  _sampleSlicesView->AddObserver((*this));
+
   alignas(RecordView) static char recordViewMemBuf[sizeof(RecordView)];
   _recordView = new (recordViewMemBuf) RecordView((*this), _viewData);
   _recordView->AddObserver((*this));
@@ -491,7 +516,7 @@ AppWindow::LoadProjectResult AppWindow::LoadProject(const char *projectName) {
 
   if (!playerOK) {
     MessageBox *mb =
-        new MessageBox(*_songView, "Failed to initialize audio", MBBF_OK);
+        MessageBox::Create(*_songView, "Failed to initialize audio", MBBF_OK);
     _songView->DoModal(mb);
   }
 
@@ -519,21 +544,58 @@ void AppWindow::CloseProject() {
 
   ApplicationCommandDispatcher::GetInstance()->Close();
 
-  SAFE_DELETE(_songView);
-  SAFE_DELETE(_chainView);
-  SAFE_DELETE(_phraseView);
-  SAFE_DELETE(_deviceView);
-  SAFE_DELETE(_themeView);
-  SAFE_DELETE(_themeImportView);
-  SAFE_DELETE(_projectView);
-  SAFE_DELETE(_instrumentView);
-  SAFE_DELETE(_tableView);
-  SAFE_DELETE(_grooveView);
+  if (_songView) {
+    _songView->~SongView();
+    _songView = nullptr;
+  }
+  if (_chainView) {
+    _chainView->~ChainView();
+    _chainView = nullptr;
+  }
+  if (_phraseView) {
+    _phraseView->~PhraseView();
+    _phraseView = nullptr;
+  }
+  if (_deviceView) {
+    _deviceView->~DeviceView();
+    _deviceView = nullptr;
+  }
+  if (_themeView) {
+    _themeView->~ThemeView();
+    _themeView = nullptr;
+  }
+  if (_themeImportView) {
+    _themeImportView->~ThemeImportView();
+    _themeImportView = nullptr;
+  }
+  if (_projectView) {
+    _projectView->~ProjectView();
+    _projectView = nullptr;
+  }
+  if (_instrumentView) {
+    _instrumentView->~InstrumentView();
+    _instrumentView = nullptr;
+  }
+  if (_tableView) {
+    _tableView->~TableView();
+    _tableView = nullptr;
+  }
+  if (_grooveView) {
+    _grooveView->~GrooveView();
+    _grooveView = nullptr;
+  }
+  if (_sampleSlicesView) {
+    _sampleSlicesView->~SampleSlicesView();
+    _sampleSlicesView = nullptr;
+  }
 
   UIController *controller = UIController::GetInstance();
   controller->Reset();
 
-  SAFE_DELETE(_viewData);
+  if (_viewData) {
+    _viewData->~ViewData();
+    _viewData = nullptr;
+  }
 
   _currentView = _nullView;
   _nullView->SetDirty(true);
@@ -549,7 +611,11 @@ AppWindow *AppWindow::Create(GUICreateWindowParams &params,
   return w;
 };
 
-void AppWindow::SetDirty() { _isDirty = true; };
+void AppWindow::SetDirty() {
+  if (_currentView) {
+    _currentView->SetDirty(true);
+  }
+};
 
 void AppWindow::UpdateColorsFromConfig() {
   // now assign custom colors if they have been set device config
@@ -580,8 +646,6 @@ bool AppWindow::onEvent(GUIEvent &event) {
   // mixer lock, otherwise the windows driver will never return
 
   _shouldQuit = false;
-
-  _isDirty = false;
 
   unsigned short v = 1 << event.GetValue();
 
@@ -616,7 +680,7 @@ bool AppWindow::onEvent(GUIEvent &event) {
        if
        (_currentView!=_listView) {
        CloseProject() ;
-       _isDirty=true ;
+       _currentView->SetDirty(true) ;
        } else {
                             System::GetInstance()->PostQuitMessage() ;
                     };
@@ -633,11 +697,11 @@ bool AppWindow::onEvent(GUIEvent &event) {
   }
   if (_closeProject) {
     CloseProject();
-    _isDirty = true;
+    SetDirty();
   }
 
-  // _isDirty flag will be checked in AnimationUpdate to determine if redraw is
-  // needed
+  // View dirty flag will be checked in AnimationUpdate to determine if redraw
+  // is needed
   return false;
 };
 
@@ -646,7 +710,7 @@ void AppWindow::onUpdate(bool redraw) {
     GUIWindow::Clear(backgroundColor_, true);
     Clear(true);
     // Mark as dirty to trigger redraw in AnimationUpdate
-    _isDirty = true;
+    SetDirty();
   }
   // No Flush here - AnimationUpdate will handle it
 };
@@ -654,7 +718,7 @@ void AppWindow::onUpdate(bool redraw) {
 void AppWindow::AnimationUpdate() {
   // Increment the animation frame counter
   animationFrameCounter_++;
-  char failedProjectName_[MAX_PROJECT_NAME_LENGTH] = {0};
+  char failedProjectName_[MAX_PROJECT_NAME_LENGTH + 1] = {0};
 
   if (awaitingProjectLoadAck_) {
     if (_mask != 0) {
@@ -709,11 +773,11 @@ void AppWindow::AnimationUpdate() {
 
   if (lowBatteryState_ && !lowBatteryMessageShown_) {
     if (!_currentView->HasModalView()) {
-      FullScreenBox *mb = new FullScreenBox(*_currentView, "Low battery!",
-                                            "Connect charger", 0);
+      FullScreenBox *mb = FullScreenBox::Create(*_currentView, "Low battery!",
+                                                "Connect charger", 0);
       _currentView->DoModal(mb);
       lowBatteryMessageShown_ = true;
-      _isDirty = true;
+      SetDirty();
     }
   } else if (!lowBatteryState_ && lowBatteryMessageShown_) {
     ModalView *modal = _currentView->GetModalView();
@@ -723,13 +787,30 @@ void AppWindow::AnimationUpdate() {
       Trace::Debug("CLose Low Batt dialog");
     }
     lowBatteryMessageShown_ = false;
-    _isDirty = true;
+    SetDirty();
+  }
+
+  if (sdCardMissing_ && !sdCardMessageShown_) {
+    if (_currentView) {
+      FullScreenBox *mb = FullScreenBox::Create(
+          *_currentView, "SD Card Missing", "Insert SD Card", 0);
+      _currentView->DoModal(mb);
+      sdCardMessageShown_ = true;
+      SetDirty();
+    }
+  } else if (!sdCardMissing_ && sdCardMessageShown_) {
+    ModalView *modal = _currentView ? _currentView->GetModalView() : nullptr;
+    if (modal) {
+      modal->EndModal(0);
+      _currentView->DismissModal();
+    }
+    sdCardMessageShown_ = false;
+    SetDirty();
   }
 
   // If we need a full redraw due to state changes from key events
-  if (_isDirty && _currentView) {
+  if (_currentView && _currentView->isDirty()) {
     _currentView->Redraw(); // Draw main content
-    _isDirty = false;       // Reset the flag
   }
 
   // Handle view updates
@@ -838,6 +919,9 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
     case VT_SAMPLE_EDITOR:
       _currentView = _sampleEditorView;
       break;
+    case VT_SAMPLE_SLICES:
+      _currentView = _sampleSlicesView;
+      break;
     case VT_RECORD:
       _currentView = _recordView;
       break;
@@ -845,7 +929,7 @@ void AppWindow::Update(Observable &o, I_ObservableData *d) {
       break;
     }
     _currentView->SetFocus(*vt);
-    _isDirty = true;
+    SetDirty();
     GUIWindow::Clear(backgroundColor_, true);
     Clear(true);
     break;
