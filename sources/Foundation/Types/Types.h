@@ -43,6 +43,7 @@ struct FourCC {
     InstrumentCommandTempo = 62,               // TMPO
     InstrumentCommandVelocity = 66,            // VELM
     InstrumentCommandVolume = 69,              // VOLM
+    InstrumentCommandVibrato = 73,             // VIBR
     InstrumentCommandNone = 45,                // ----
     InstrumentCommandMidiChord = 143,
 
@@ -306,6 +307,7 @@ struct FourCC {
   ETL_ENUM_TYPE(InstrumentCommandDelay, "DLY")
   ETL_ENUM_TYPE(InstrumentCommandInstrumentRetrigger, "IRT")
   ETL_ENUM_TYPE(InstrumentCommandMidiChord, "MCH")
+  ETL_ENUM_TYPE(InstrumentCommandVibrato, "VIB")
 
   ETL_ENUM_TYPE(VarLineOut, "LINEOUT")
   ETL_ENUM_TYPE(VarMidiDevice, "MIDIDEVICE")

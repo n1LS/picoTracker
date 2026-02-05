@@ -147,7 +147,6 @@ typedef struct voice_t {
 
   uint8_t note;
   uint8_t wave;
-  uint8_t vibDepth;
   uint8_t flags = 0; // bit 0: arpeggio, bit 1: legato
 
   uint8_t arpTick = 0;
@@ -157,7 +156,6 @@ typedef struct voice_t {
   int32_t frequency = 0;
   int32_t lastFrequency = 0;
 
-  uint8_t volume;
   uint8_t burstTime;
   uint8_t arpLength = 5;
   uint8_t arpIndex = 0;
@@ -169,8 +167,7 @@ typedef struct voice_t {
   uint32_t lifetime;
 
   uint16_t vibPhase;
-  const uint16_t vibFrequency = 0xfff;
-
+  uint16_t vibFrequency = 0xfff;
   int32_t vibSwing;
 
   uint16_t vibDelay;
@@ -204,7 +201,8 @@ typedef struct voice_t {
   }
 
   inline void sample(fixed *left, fixed *right) {
-    uint32_t combinedGain = (volume * envelope.value) >> 16; // precompute
+    uint32_t combinedGain =
+        (parameters.level * envelope.value) >> 16; // precompute
 
     uint8_t leftGain = std::min((0xff - pan) * 2, 0xff);
     uint8_t rightGain = std::min(0xff, 2 * pan);
@@ -217,7 +215,7 @@ typedef struct voice_t {
       envelope.tick();
 
       // recompute combined gain when envelope changes
-      combinedGain = (volume * envelope.value) >> 16;
+      combinedGain = (parameters.level * envelope.value) >> 16;
 
       // sweep
       if (sweepSteps) {
@@ -248,8 +246,8 @@ typedef struct voice_t {
           }
         }
 
-        uint8_t leftGain = std::min((0xff - pan) * 2, 0xff);
-        uint8_t rightGain = std::min(0xff, 2 * pan);
+        leftGain = std::min((0xff - pan) * 2, 0xff);
+        rightGain = std::min(0xff, 2 * pan);
       }
 
       // vibrato
@@ -259,7 +257,7 @@ typedef struct voice_t {
         vibPhase += vibFrequency;
         int32_t sine = interpolateS8(sine64LUT.data(), vibPhase >> 8);
         delta = (vibSwing * sine) >> 7;
-        delta = (vibDepth * delta) >> 8;
+        delta = (parameters.vibratoDepth * delta) >> 8;
       }
 
       frequency = arpFrequencies[arpIndex] + delta;
@@ -318,11 +316,21 @@ typedef struct voice_t {
     // hot loop @ ~44100 Hz ----------------------------------------------------
     tick--;
     tock--;
+    time++;
 
     // advance phase
     phase += frequency;
 
     fixed sample = 0;
+
+#define noise(func)                                                            \
+  {                                                                            \
+    if (phase > 0x4000'0000) {                                                 \
+      phase -= 0x4000'0000;                                                    \
+      noise = func(&lfsr);                                                     \
+    }                                                                          \
+    sample = noise;                                                            \
+  }
 
     // generate sample based on waveform
     switch (wave) {
@@ -346,24 +354,19 @@ typedef struct voice_t {
       sample &= 0xFF00'0000; // downsample
       break;
     case gbWaveNoiseGameBoy: // noise: GB7
-    case gbWaveNoiseNES:     // noise: NES
+      noise(voice_noise_gb7);
+      break;
+    case gbWaveNoiseNES: // noise: NES
+      noise(voice_noise_nes);
+      break;
     case gbWaveNoiseSN76489: // noise: SN76489
-      if (phase > 0x4000'0000) {
-        phase -= 0x4000'0000;
-        noise = (wave == gbWaveNoiseGameBoy) ? voice_noise_gb7(&lfsr)
-                : (wave == gbWaveNoiseNES)   ? voice_noise_nes(&lfsr)
-                                             : voice_noise_sn76489(&lfsr);
-      }
-      sample = noise;
+      noise(voice_noise_sn76489);
       break;
     case gbWaveNoiseWhite: // noise: white noise, frequency independent
-      lcg *= 1664525;
-      lcg += 1013904223;
+      lcg = (lcg * 1664525) + 1013904223;
       sample = lcg & 0x0FFF'FFFF;
       break;
     }
-
-    time++;
 
     // apply combined gain (volume * envelope) in single operation
     sample = (sample >> 8) * combinedGain;
@@ -376,7 +379,6 @@ typedef struct voice_t {
     }
 
     // apply panning
-
     *left = (sample >> 8) * leftGain;
     *right = (sample >> 8) * rightGain;
   }
@@ -418,8 +420,8 @@ typedef struct voice_t {
     // reset vibrato
     vibSwing = frequencyLUT[fIndex + 1] - frequency;
     vibDelay = parameters.vibratoDelay << 8;
-    vibDepth = parameters.vibratoDepth;
     vibPhase = 0;
+    vibFrequency = 0xfff;
 
     // reset envelope
     envelope.setAttack(parameters.attack);
@@ -429,7 +431,6 @@ typedef struct voice_t {
     lifetime = (parameters.length == 0) ? 0x7FFF'FFFF : (parameters.length);
 
     wave = parameters.wave;
-    volume = parameters.level;
     burstTime = parameters.burst;
 
     // sweep
@@ -512,6 +513,19 @@ typedef struct voice_t {
   void command_init_pan(uint8_t speed, int8_t pan) {
     panTarget = pan;
     panStep = speed;
+  }
+
+  void command_init_vibrato(uint8_t rate, uint8_t depth) {
+    vibFrequency = rate << 6;
+
+    // max swing == one octave
+    int fIndex = std::clamp(note + 12 + parameters.transpose, 0, 127 + 24);
+    uint64_t mod = frequencyLUT[fIndex + 12] - frequency;
+    mod = (mod * depth) >> 8;
+    vibSwing = (int32_t)mod;
+
+    // start immediately
+    vibDelay = 0;
   }
 
   // fully fixed-point per-tick legato initialization

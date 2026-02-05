@@ -101,6 +101,10 @@ void GameBoyInstrument::ProcessCommand(int channel, FourCC cc, ushort value) {
     voices_[channel].drive = value >> 8;
     break;
 
+  case FourCC::InstrumentCommandVibrato:
+    voices_[channel].command_init_vibrato(value >> 8, value & 0xFF);
+    break;
+
   case FourCC::InstrumentCommandPan:
     voices_[channel].command_init_pan(value >> 8, value & 0xFF);
     break;
@@ -122,6 +126,7 @@ InstrumentParameters GameBoyInstrument::getInstrumentParameters() {
   params.attack = vAttack_.GetInt();
   params.decay = vDecay_.GetInt();
   params.level = vLevel_.GetInt();
+  // off == -1, map to uint8_t range
   params.length = vLength_.GetInt() < 0 ? 0 : vLength_.GetInt();
   params.burst = vBurst_.GetInt() < 0 ? 0 : vBurst_.GetInt();
   params.vibratoDepth = vVibratoDepth_.GetInt();
