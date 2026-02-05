@@ -14,11 +14,11 @@
 #include "Application/Model/Song.h"
 #include "Application/Persistency/Persistent.h"
 #include "Externals/etl/include/etl/pool.h"
+#include "GameBoyInstrument.h"
 #include "MidiInstrument.h"
 #include "NoneInstrument.h"
 #include "OpalInstrument.h"
 #include "SIDInstrument.h"
-#include "GameBoyInstrument.h"
 #include "SampleInstrument.h"
 
 #define NO_MORE_INSTRUMENT 0x100
@@ -27,6 +27,7 @@ class InstrumentBank : public Persistent {
 public:
   InstrumentBank();
   ~InstrumentBank();
+  void Reset();
   void AssignDefaults();
   I_Instrument *GetInstrument(int i);
   virtual void SaveContent(tinyxml2::XMLPrinter *printer);
@@ -49,7 +50,8 @@ private:
   etl::pool<MidiInstrument, MAX_MIDIINSTRUMENT_COUNT> midiInstrumentPool_;
   etl::pool<SIDInstrument, MAX_SIDINSTRUMENT_COUNT> sidInstrumentPool_;
   etl::pool<OpalInstrument, MAX_OPALINSTRUMENT_COUNT> opalInstrumentPool_;
-  etl::pool<GameBoyInstrument, MAX_GAMEBOYINSTRUMENT_COUNT> GameBoyInstrumentPool_;
+  etl::pool<GameBoyInstrument, MAX_GAMEBOYINSTRUMENT_COUNT>
+      GameBoyInstrumentPool_;
   NoneInstrument none_ = NoneInstrument();
   unsigned short sidOscCount = 0;
 };

@@ -16,10 +16,10 @@
 #include "Application/Persistency/PersistencyService.h"
 #include "Application/Utils/char.h"
 #include "Filters.h"
+#include "GameBoyInstrument.h"
 #include "MidiInstrument.h"
 #include "OpalInstrument.h"
 #include "SIDInstrument.h"
-#include "GameBoyInstrument.h"
 #include "System/io/Status.h"
 
 #define XML_DEBUG_LOGGING 0
@@ -27,7 +27,7 @@
 // Contain all instrument definition
 InstrumentBank::InstrumentBank()
     : Persistent("INSTRUMENTBANK"), sampleInstrumentPool_(),
-      midiInstrumentPool_(), sidInstrumentPool_(), opalInstrumentPool_(), 
+      midiInstrumentPool_(), sidInstrumentPool_(), opalInstrumentPool_(),
       GameBoyInstrumentPool_() {
 
   for (size_t i = 0; i < instruments_.max_size(); i++) {
@@ -37,12 +37,19 @@ InstrumentBank::InstrumentBank()
   Status::Set("All instruments preloaded");
 };
 
-InstrumentBank::~InstrumentBank() {
+InstrumentBank::~InstrumentBank() { Reset(); };
+
+void InstrumentBank::Reset() {
   sampleInstrumentPool_.release_all();
   midiInstrumentPool_.release_all();
   sidInstrumentPool_.release_all();
   opalInstrumentPool_.release_all();
   GameBoyInstrumentPool_.release_all();
+
+  for (size_t i = 0; i < instruments_.max_size(); i++) {
+    instruments_[i] = &none_;
+  }
+  sidOscCount = 0;
 };
 
 I_Instrument *InstrumentBank::GetInstrument(int i) { return instruments_[i]; };
@@ -244,9 +251,8 @@ unsigned short InstrumentBank::GetNextFreeInstrumentSlotId() {
 unsigned short InstrumentBank::Clone(unsigned short i) {
   I_Instrument *src = instruments_[i];
 
-  // TODO: NEED TO actually find the next available instrument slot, if there
-  // even is one
-  auto nextFreeInstrumentSlotId = i++;
+  // Find next available instrument slot
+  auto nextFreeInstrumentSlotId = GetNextFreeInstrumentSlotId();
 
   unsigned short next =
       GetNextAndAssignID(src->GetType(), nextFreeInstrumentSlotId);

@@ -19,15 +19,22 @@
 #include "BaseClasses/UINoteVarField.h"
 #include "BaseClasses/UIStaticField.h"
 #include "BaseClasses/UITextField.h"
+#include "Externals/etl/include/etl/string.h"
 #include "Externals/etl/include/etl/vector.h"
 #include "FieldView.h"
 #include "Foundation/Observable.h"
+#include "Foundation/Variables/Variable.h"
+#include "Foundation/Variables/WatchedVariable.h"
 #include "ViewData.h"
+#include <cstddef>
+
+class SampleInstrument;
 
 class InstrumentView : public FieldView, public I_Observer {
 public:
   InstrumentView(GUIWindow &w, ViewData *data);
   virtual ~InstrumentView();
+  void Reset();
 
   virtual void ProcessButtonMask(unsigned short mask, bool pressed);
   virtual void DrawView();
@@ -56,11 +63,13 @@ protected:
   void handleInstrumentExport();
 
 private:
+  static constexpr size_t SliceCountLabelSize = 20;
   Project *project_;
   FourCC lastFocusID_;
   WatchedVariable instrumentType_;
   int lastSampleIndex_;
   bool suppressSampleChangeWarning_;
+  etl::string<SliceCountLabelSize> sliceCountLabel_;
 
   // Variables for export confirmation dialog
   I_Instrument *exportInstrument_ = nullptr;
@@ -70,7 +79,7 @@ private:
   etl::vector<UIActionField, 2> persistentActionField_;
   etl::vector<UIIntVarField, 40> intVarField_;
   etl::vector<UINoteVarField, 1> noteVarField_;
-  etl::vector<UIStaticField, 4> staticField_;
+  etl::vector<UIStaticField, 5> staticField_;
   etl::vector<UIBigHexVarField, 4> bigHexVarField_;
   etl::vector<UIIntVarOffField, 2> intVarOffField_;
   etl::vector<UIActionField, 1> sampleActionField_;
