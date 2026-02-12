@@ -1211,7 +1211,7 @@ void PhraseView::DrawView() {
   char title[SCREEN_WIDTH + 1];
 
   SetColor(CD_NORMAL);
-  npf_snprintf(title, sizeof(title), "Phrase %2.2x", viewData_->currentPhrase_);
+  npf_snprintf(title, sizeof(title), "Phrase %2.2X", viewData_->currentPhrase_);
   DrawString(pos._x, pos._y, title, props);
 
   // Compute song grid location
