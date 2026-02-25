@@ -14,13 +14,10 @@
 #include "BaseClasses/UIIntVarField.h"
 #include "BaseClasses/UIStaticField.h"
 #include "BaseClasses/UITempoField.h"
-#include "BaseClasses/UITextField.h"
 #include "FieldView.h"
 #include "Foundation/Observable.h"
 #include "ViewData.h"
 #include <stdint.h>
-
-template <uint8_t MaxLength> class UITextField;
 
 class ProjectView : public FieldView, public I_Observer {
 public:
@@ -34,13 +31,17 @@ public:
   virtual void OnFocus();
 
   etl::string<MAX_PROJECT_NAME_LENGTH> getProjectName() {
-    return etl::string<MAX_PROJECT_NAME_LENGTH>(
-        nameField_->GetString().c_str());
+    char projectName[MAX_PROJECT_NAME_LENGTH + 1];
+    project_->GetProjectName(projectName);
+    return etl::string<MAX_PROJECT_NAME_LENGTH>(projectName);
   };
 
   etl::string<MAX_PROJECT_NAME_LENGTH> getOldProjectName() {
     return oldProjName_;
   };
+  void SetProjectName(const char *name);
+  void EditProjectName();
+
   void clearSaveAsFlag() {
     saveAsFlag_ = false;
     oldProjName_ = getProjectName();
@@ -63,12 +64,12 @@ private:
   // Statically allocated field vectors
   etl::vector<UITempoField, 1> tempoField_;
   etl::vector<UIIntVarField, 4> intVarField_;
-  etl::vector<UIActionField, 9> actionField_;
-  etl::vector<UIStaticField, 1> staticField_;
-  etl::vector<UITextField<MAX_PROJECT_NAME_LENGTH>, 1> textField_;
+  etl::vector<UIActionField, 10> actionField_;
+  etl::vector<UIStaticField, 2> staticField_;
 
   // References to specific fields that need direct access
-  UITextField<MAX_PROJECT_NAME_LENGTH> *nameField_;
+  UIActionField *projectNameActionField_;
+  char projectNameActionLabel_[MAX_PROJECT_NAME_LENGTH + 1];
   bool saveAsFlag_ = false;
   etl::string<MAX_PROJECT_NAME_LENGTH> oldProjName_;
 

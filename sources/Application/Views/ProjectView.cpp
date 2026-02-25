@@ -14,6 +14,7 @@
 #include "Application/Views/ImportView.h"
 #include "Application/Views/ModalDialogs/MessageBox.h"
 #include "Application/Views/ModalDialogs/RenderProgressModal.h"
+#include "Application/Views/ModalDialogs/TextInputViewModal.h"
 #include "Application/Views/SampleEditorView.h"
 #include "BaseClasses/UIActionField.h"
 #include "BaseClasses/UIIntVarField.h"
@@ -72,6 +73,13 @@ static void SaveAsOverwriteCallback(View &v, ModalView &dialog) {
 static void PurgeCallback(View &v, ModalView &dialog) {
   if (dialog.GetReturnCode() == MBL_YES) {
     ((ProjectView &)v).OnPurge();
+  }
+};
+
+static void ProjectNameCallback(View &v, ModalView &dialog) {
+  if (dialog.GetReturnCode() == MBL_YES) {
+    const char *text = static_cast<TextInputViewModal &>(dialog).getText();
+    ((ProjectView &)v).SetProjectName(text);
   }
 };
 
@@ -161,17 +169,18 @@ ProjectView::ProjectView(GUIWindow &w, ViewData *data) : FieldView(w, data) {
   // save existing fields horizontal alignment
   int xalign = position._x;
 
-  v = project_->FindVariable(FourCC::VarProjectName);
-  auto label =
-      etl::make_string_with_capacity<MAX_UITEXTFIELD_LABEL_LENGTH>("project: ");
-  auto defaultName = etl::make_string_with_capacity<MAX_PROJECT_NAME_LENGTH>(
-      UNNAMED_PROJECT_NAME);
-  textField_.emplace_back(*v, position, label, FourCC::ActionProjectRename,
-                          defaultName);
-  nameField_ = &(*textField_.rbegin());
+  staticField_.emplace_back(position, "project:");
+  fieldList_.insert(fieldList_.end(), &(*staticField_.rbegin()));
 
-  nameField_->AddObserver(*this);
-  fieldList_.insert(fieldList_.end(), nameField_);
+  GUIPoint projectNamePosition = position;
+  projectNamePosition._x += 9;
+  snprintf(projectNameActionLabel_, sizeof(projectNameActionLabel_), "%s",
+           getProjectName().c_str());
+  actionField_.emplace_back(projectNameActionLabel_,
+                            FourCC::ActionProjectRename, projectNamePosition);
+  projectNameActionField_ = &(*actionField_.rbegin());
+  projectNameActionField_->AddObserver(*this);
+  fieldList_.insert(fieldList_.end(), projectNameActionField_);
 
   position._y += 1;
   actionField_.emplace_back("Browse", FourCC::ActionBrowse, position);
@@ -217,6 +226,26 @@ ProjectView::ProjectView(GUIWindow &w, ViewData *data) : FieldView(w, data) {
 }
 
 ProjectView::~ProjectView() {}
+
+void ProjectView::SetProjectName(const char *name) {
+  if (name == nullptr) {
+    return;
+  }
+
+  project_->SetProjectName(name);
+  snprintf(projectNameActionLabel_, sizeof(projectNameActionLabel_), "%s",
+           getProjectName().c_str());
+  saveAsFlag_ = true;
+  isDirty_ = true;
+}
+
+void ProjectView::EditProjectName() {
+  // create and show a textinputmodal
+  TextInputViewModal *modal = TextInputViewModal::Create(
+      *this, "Rename Project", getProjectName().c_str(),
+      MAX_PROJECT_NAME_LENGTH);
+  DoModal(modal, ModalViewCallback::create<&ProjectNameCallback>());
+}
 
 void ProjectView::ProcessButtonMask(unsigned short mask, bool pressed) {
 
@@ -281,6 +310,9 @@ void ProjectView::DrawView() {
   etl::string<MAX_PROJECT_NAME_LENGTH> projectName = v->GetString();
   DrawString(pos._x + strlen(title), pos._y, projectName.c_str(), props);
 
+  snprintf(projectNameActionLabel_, sizeof(projectNameActionLabel_), "%s",
+           getProjectName().c_str());
+
   FieldView::Redraw();
   drawMap();
 };
@@ -323,8 +355,7 @@ void ProjectView::Update(Observable &, I_ObservableData *data) {
     uint32_t randNum = sys->GetRandomNumber();
     getNamesByIndex(name, randNum, 10);
     printf("random:%s", name);
-    project_->SetProjectName(name);
-    saveAsFlag_ = true;
+    SetProjectName(name);
     break;
   }
   case FourCC::ActionSave: {
@@ -365,9 +396,7 @@ void ProjectView::Update(Observable &, I_ObservableData *data) {
     break;
   }
   case FourCC::ActionProjectRename:
-    Trace::Log("PROJECTVIEW", "Project renamed! prev name:%s",
-               nameField_->GetString().c_str());
-    saveAsFlag_ = true;
+    EditProjectName();
     break;
   case FourCC::ActionBrowse: {
     if (CanExit()) {
