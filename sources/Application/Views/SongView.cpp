@@ -931,6 +931,30 @@ void SongView::DrawView() {
   drawMap();
   drawNotes();
 
+  unsigned char chainId =
+      *(viewData_->song_->data_ + viewData_->songX_ +
+        SONG_CHANNEL_COUNT * (viewData_->songOffset_ + viewData_->songY_));
+
+  if (!player->IsRunning() && chainId != EMPTY_SONG_VALUE) {
+    SetColor(CD_CONSOLE);
+    DrawString(anchor._x + 3 * SONG_CHANNEL_COUNT, anchor._y - 1, "Ch", props);
+
+    char buffer[3];
+    // draw the selected chain if any
+    for (int i = 0; i < STEPS_PER_PHRASE; i++) {
+      unsigned char c = viewData_->song_->chain_.data_[16 * chainId + i];
+      if (c != EMPTY_SONG_VALUE) {
+        hex2char(c, buffer);
+      } else {
+        buffer[0] = '-';
+        buffer[1] = '-';
+      }
+
+      DrawString(anchor._x + 3 * SONG_CHANNEL_COUNT, anchor._y + i, buffer,
+                 props);
+    }
+  }
+
   if (player->IsRunning()) {
     OnPlayerUpdate(PET_UPDATE);
   };

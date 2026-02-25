@@ -754,6 +754,92 @@ void ChainView::DrawView() {
   if (player->IsRunning()) {
     OnPlayerUpdate(PET_UPDATE);
   };
+
+  // Draw phrase if selected
+  const unsigned char phraseId = *viewData_->GetCurrentChainPointer();
+  if (phraseId == EMPTY_SONG_VALUE) {
+    return;
+  }
+
+  // Draw phrase title
+  SetColor(CD_CONSOLE);
+  char buffer[10];
+
+  // Display notes
+  unsigned char *note = viewData_->song_->phrase_.note_ + (16 * phraseId);
+  unsigned char *instrData = viewData_->song_->phrase_.instr_ + (16 * phraseId);
+
+  pos._y = anchor._y;
+  pos._x = anchor._x + 6;
+
+  unsigned char lastInstr = 0xFF;
+  InstrumentBank *bank = viewData_->project_->GetInstrumentBank();
+
+  buffer[4] = 0;
+  for (int j = 0; j < 16; j++) {
+    unsigned char d = *note++;
+    unsigned char instr = *instrData++;
+
+    if (instr != 0xFF) {
+      lastInstr = instr;
+    }
+
+    if (d == NO_NOTE) {
+      DrawString(pos._x, pos._y, "----", props);
+    } else if (d == NOTE_OFF) {
+      DrawString(pos._x, pos._y, "off ", props);
+    } else {
+      bool showSlice = false;
+      bool invalidSlice = false;
+      uint8_t sliceIndex = 0;
+      if (lastInstr != 0xFF && bank) {
+        I_Instrument *instrObj = bank->GetInstrument(lastInstr);
+        if (instrObj && instrObj->GetType() == IT_SAMPLE) {
+          SampleInstrument *sampleInstr =
+              static_cast<SampleInstrument *>(instrObj);
+          if (sampleInstr->HasSlicesForPlayback()) {
+            if (sampleInstr->ShouldDisplaySliceForNote(d)) {
+              showSlice = true;
+              sliceIndex =
+                  static_cast<uint8_t>(d - SampleInstrument::SliceNoteBase);
+            } else {
+              invalidSlice = true;
+            }
+          }
+        }
+      }
+      if (showSlice) {
+        npf_snprintf(buffer, sizeof(buffer), "SL%02u",
+                     static_cast<unsigned>(sliceIndex));
+      } else if (invalidSlice) {
+        npf_snprintf(buffer, sizeof(buffer), "SL**");
+      } else {
+        note2char(d, buffer);
+      }
+      DrawString(pos._x, pos._y, buffer, props);
+    }
+    pos._y++;
+  }
+
+  // Draw instruments
+  pos._y = anchor._y;
+  pos._x = anchor._x + 10;
+
+  instrData = viewData_->song_->phrase_.instr_ + (16 * phraseId);
+
+  buffer[0] = 'I';
+  buffer[3] = 0;
+
+  for (int j = 0; j < 16; j++) {
+    unsigned char d = *instrData++;
+    if (d == 0xFF) {
+      DrawString(pos._x, pos._y, "I--", props);
+    } else {
+      hex2char(d, buffer + 1);
+      DrawString(pos._x, pos._y, buffer, props);
+    }
+    pos._y++;
+  }
 };
 
 void ChainView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {
