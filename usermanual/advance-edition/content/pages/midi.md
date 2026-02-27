@@ -3,8 +3,6 @@ title: MIDI Implementation
 template: page
 ---
 
-# MIDI Implementation
-
 ## MIDI Input
 
 picoTracker supports MIDI input for real-time playback and control. This allows you to connect a MIDI keyboard or controller to play notes and control various parameters.
@@ -28,10 +26,6 @@ When a MIDI device is connected and configured, incoming MIDI notes will trigger
 **Important:** Not all instrument types support polyphonic MIDI input playback:
 
 - **Sample Instruments**: Fully support polyphonic playback. Multiple notes can be played simultaneously, and each note can be stopped independently.
-
-- **OPAL Instruments**: Should be *considered* monophonic from a MIDI input perspective. However they DONT behave completely like a monophonic instrument, so care needs to be taken to ensure that only one note is played on a midi channel at a time. 
-
-- **SID Instruments**: Should be *considered* monophonic from a MIDI input perspective. However they DONT behave completely like a monophonic instrument, so care needs to be taken to ensure that only one note is played on a midi channel at a time. 
 
 ### Supported MIDI Messages
 

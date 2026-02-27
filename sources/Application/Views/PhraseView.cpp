@@ -801,7 +801,6 @@ void PhraseView::OnFocus() {
 };
 
 void PhraseView::ProcessButtonMask(unsigned short mask, bool pressed) {
-
   if (!pressed) {
     // ENTER might now no longer be pressed so first check if we were in
     // audition mode and if its not then stop auditioning, stopAudition does
@@ -879,7 +878,12 @@ void PhraseView::ProcessButtonMask(unsigned short mask, bool pressed) {
     }
   }
 
-  if (mask == (EPBM_ALT | EPBM_EDIT | EPBM_ENTER)) {
+  if ((viewMode_ == VM_CLONE) && !((mask & EPBM_ENTER) && (mask & EPBM_ALT))) {
+    viewMode_ = VM_SELECTION;
+  }
+
+  if ((mask == (EPBM_ALT | EPBM_EDIT | EPBM_ENTER)) ||
+      ((viewMode_ == VM_CLONE) && (mask & EPBM_ENTER) && (mask & EPBM_ALT))) {
     if (col_ < 2) {
       InstrumentBank *bank = viewData_->project_->GetInstrumentBank();
       unsigned char *c =
@@ -928,6 +932,8 @@ void PhraseView::ProcessButtonMask(unsigned short mask, bool pressed) {
         }
       }
     };
+    viewMode_ = VM_NORMAL;
+    clipboard_.active_ = false;
     return;
   }
 
@@ -961,6 +967,9 @@ void PhraseView::processNormalButtonMask(unsigned short mask) {
       warpInChain(1);
     if (mask & EPBM_ENTER) {
       cutPosition();
+    }
+    if (mask & EPBM_ALT) {
+      viewMode_ = VM_CLONE;
     }
     if (mask & EPBM_NAV)
       toggleMute();
@@ -1058,7 +1067,6 @@ void PhraseView::processNormalButtonMask(unsigned short mask) {
 
   } else if (mask & EPBM_ALT) {
     // ALT Modifier
-
   } else {
     // No modifier
     if (mask & EPBM_DOWN)
@@ -1203,7 +1211,7 @@ void PhraseView::DrawView() {
   char title[SCREEN_WIDTH + 1];
 
   SetColor(CD_NORMAL);
-  npf_snprintf(title, sizeof(title), "Phrase %2.2x", viewData_->currentPhrase_);
+  npf_snprintf(title, sizeof(title), "Phrase %2.2X", viewData_->currentPhrase_);
   DrawString(pos._x, pos._y, title, props);
 
   // Compute song grid location
@@ -1299,7 +1307,7 @@ void PhraseView::DrawView() {
       hex2char(d, buffer + 1);
       DrawString(pos._x, pos._y, buffer, props);
       if (j == row_) {
-        npf_snprintf(buffer, sizeof(buffer), "I%2.2x:", d);
+        npf_snprintf(buffer, sizeof(buffer), "I%2.2X:", d);
         etl::string<32 - BATTERY_GAUGE_WIDTH> instrLine = buffer;
         setTextProps(props, 1, j, true);
         GUIPoint location = GetTitlePosition();
