@@ -295,8 +295,8 @@ void InstrumentView::refreshInstrumentFields() {
   case IT_OPAL:
     fillOpalParameters();
     break;
-  case IT_GAMEBOY:
-    fillGameBoyParameters();
+  case IT_CHIPTUNE:
+    fillChiptuneParameters();
     break;
   case IT_LAST:
     // NA
@@ -569,7 +569,7 @@ void InstrumentView::fillSIDParameters() {
   fieldList_.insert(fieldList_.end(), &(*intVarField_.rbegin()));
 };
 
-#include "InstrumentView_GameBoy.ipp"
+#include "InstrumentView_Chiptune.ipp"
 
 void InstrumentView::fillMidiParameters() {
 
@@ -968,7 +968,7 @@ void InstrumentView::DrawView() {
   I_Instrument *instr = getInstrument();
   if (instr) {
     InstrumentType type = instr->GetType();
-    if (type == IT_SID || type == IT_OPAL || type == IT_GAMEBOY) {
+    if (type == IT_SID || type == IT_OPAL || type == IT_CHIPTUNE) {
       SetColor(CD_WARN);
       DrawString(18, 1, "!EXPERIMENTAL!", props);
       SetColor(CD_NORMAL);

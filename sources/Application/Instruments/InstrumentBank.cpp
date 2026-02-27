@@ -15,8 +15,8 @@
 #include "Application/Model/Config.h"
 #include "Application/Persistency/PersistencyService.h"
 #include "Application/Utils/char.h"
+#include "ChiptuneInstrument.h"
 #include "Filters.h"
-#include "GameBoyInstrument.h"
 #include "MidiInstrument.h"
 #include "OpalInstrument.h"
 #include "SIDInstrument.h"
@@ -28,7 +28,7 @@
 InstrumentBank::InstrumentBank()
     : Persistent("INSTRUMENTBANK"), sampleInstrumentPool_(),
       midiInstrumentPool_(), sidInstrumentPool_(), opalInstrumentPool_(),
-      GameBoyInstrumentPool_() {
+      ChiptuneInstrumentPool_() {
 
   for (size_t i = 0; i < instruments_.max_size(); i++) {
     instruments_[i] = &none_;
@@ -44,7 +44,7 @@ void InstrumentBank::Reset() {
   midiInstrumentPool_.release_all();
   sidInstrumentPool_.release_all();
   opalInstrumentPool_.release_all();
-  GameBoyInstrumentPool_.release_all();
+  ChiptuneInstrumentPool_.release_all();
 
   for (size_t i = 0; i < instruments_.max_size(); i++) {
     instruments_[i] = &none_;
@@ -191,10 +191,10 @@ unsigned short InstrumentBank::GetNextAndAssignID(InstrumentType type,
     instruments_[id] = oi;
     return id;
   } break;
-  case IT_GAMEBOY: {
-    GameBoyInstrument *gbi = GameBoyInstrumentPool_.create();
+  case IT_CHIPTUNE: {
+    ChiptuneInstrument *gbi = ChiptuneInstrumentPool_.create();
     if (gbi == nullptr) {
-      Trace::Error("GameBoy INSTRUMENT EXHAUSTED!");
+      Trace::Error("Chiptune INSTRUMENT EXHAUSTED!");
       return NO_MORE_INSTRUMENT;
     }
     gbi->Init();
@@ -227,8 +227,8 @@ void InstrumentBank::releaseInstrument(unsigned short id) {
   case IT_OPAL:
     opalInstrumentPool_.destroy(instrument);
     break;
-  case IT_GAMEBOY:
-    GameBoyInstrumentPool_.destroy(instrument);
+  case IT_CHIPTUNE:
+    ChiptuneInstrumentPool_.destroy(instrument);
     break;
   case IT_NONE:
     // NA: None is a "singleton" so no need to release from pool
