@@ -34,22 +34,33 @@ void ThemeImportView::Reset() {
 }
 
 void ThemeImportView::OpenSelectedItem() {
+  auto fs = FileSystem::GetInstance();
+
   if (currentIndex_ >= fileIndexList_.size())
     return;
 
-  // get selected item
-  int fileIndex = fileIndexList_[currentIndex_];
-  auto fs = FileSystem::GetInstance();
   char name[PFILENAME_SIZE];
+  bool isDir = false;
+  bool hasEntry = false;
+
+  // get selected item
+  unsigned fileIndex = fileIndexList_[currentIndex_];
   fs->getFileName(fileIndex, name, PFILENAME_SIZE);
-  onImportTheme(name);
+
+  if (fs->getFileType(fileIndex) == PFT_DIR) { // directory, navigate into it
+    setCurrentFolder(fs, name);
+  } else { // file, import it
+    onImportTheme(name);
+  }
 }
 
 void ThemeImportView::ProcessButtonMask(unsigned short mask, bool pressed) {
   if (!pressed)
     return;
 
-  if (mask & EPBM_ENTER) {
+  bool openSelecterd = false;
+
+  if ((mask & EPBM_ENTER) || (mask == (EPBM_ALT | EPBM_PLAY))) {
     OpenSelectedItem();
   } else if (mask & EPBM_UP) {
     changeSelection(mask & EPBM_EDIT ? -LIST_PAGE_SIZE : -1);
@@ -193,11 +204,16 @@ void ThemeImportView::onImportThemeModalDismiss(View &, ModalView &dialog) {
   NotifyObservers(&ve);
 }
 
-void ThemeImportView::setCurrentFolder() {
-  auto fs = FileSystem::GetInstance();
+void ThemeImportView::setCurrentFolder(FileSystem *fs, const char *name) {
+  // Only allow navigation into directories & .. but not to parent directories
+  // above THEMES_DIR
+  if ((strcmp(name, "..") == 0) && fs->isParentRoot()) {
+    // Don't navigate above THEMES_DIR
+    return;
+  }
 
-  if (!fs->chdir(THEMES_DIR)) {
-    Trace::Error("FAILED to chdir to %s", THEMES_DIR);
+  if (!fs->chdir(name)) {
+    Trace::Error("FAILED to chdir to %s", name);
     return;
   }
 
@@ -205,7 +221,7 @@ void ThemeImportView::setCurrentFolder() {
   topIndex_ = 0;
   isDirty_ = true;
 
-  // get the directory listing
+  // Use false for subDirOnly to include both files and directories
   fs->list(&fileIndexList_, THEME_FILE_EXTENSION, false);
 
   // remove directories from listing
