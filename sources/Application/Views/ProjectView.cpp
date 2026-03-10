@@ -409,8 +409,8 @@ void ProjectView::Update(Observable &, I_ObservableData *data) {
     break;
   case FourCC::ActionRenderMixdown:
     if (!player->IsRunning()) {
-      // Start playback in rendering mode with MSM_FILE
-      player->Start(PM_SONG, true, MSM_FILE, true);
+      // Start playback in offline rendering mode (faster than realtime, no DAC)
+      player->Start(PM_SONG, true, MSM_FILE_OFFLINE, true);
 
       // Show a dialog with a Stop button during rendering
       RenderProgressModal *renderDialog =
@@ -420,8 +420,8 @@ void ProjectView::Update(Observable &, I_ObservableData *data) {
     break;
   case FourCC::ActionRenderStems:
     if (!player->IsRunning()) {
-      // Start playback in rendering mode with MSM_FILESPLIT
-      player->Start(PM_SONG, true, MSM_FILESPLIT, true);
+      // Start playback in offline rendering mode (faster than realtime, no DAC)
+      player->Start(PM_SONG, true, MSM_FILESPLIT_OFFLINE, true);
 
       // Show a dialog with a Stop button during rendering
       RenderProgressModal *renderDialog = RenderProgressModal::Create(

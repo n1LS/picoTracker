@@ -67,6 +67,16 @@ void picoTrackerAudioDriver::BufferNeeded() {
   instance_->onAudioBufferTick();
 
   instance_->OnNewBufferNeeded();
+
+  // In offline render mode there is no DMA IRQ to pace Core 1, so self-release
+  // the semaphore to immediately process the next buffer at CPU speed instead
+  // of waiting ~42 ms for the hardware to drain the current chunk.
+  // offlineRendering_ is set by MixerService via SetOfflineRendering() before
+  // the first BufferNeeded() call, and cleared when the song ends or user
+  // stops.
+  if (instance_->offlineRendering_) {
+    sem_release(&core1_audio);
+  }
 }
 
 picoTrackerAudioDriver::picoTrackerAudioDriver(AudioSettings &settings)

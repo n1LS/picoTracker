@@ -22,6 +22,8 @@ enum MixerServiceMode {
   MSM_AUDIO,
   MSM_FILE,
   MSM_FILESPLIT,
+  MSM_FILE_OFFLINE,      // Mixdown, faster than realtime: no DAC output
+  MSM_FILESPLIT_OFFLINE, // Stems, faster than realtime: no DAC output
 };
 
 #define MAX_BUS_COUNT 10
@@ -60,6 +62,8 @@ public:
   void Lock();
   void Unlock();
 
+  bool IsOfflineRendering() const { return offlineRendering_; }
+
 protected:
   void setRenderingMode(MixerServiceMode mode);
 
@@ -75,5 +79,6 @@ private:
   MixBus bus_[MAX_BUS_COUNT];
   SysMutex *sync_;
   Project *project_; // Reference to the current project
+  bool offlineRendering_;
 };
 #endif

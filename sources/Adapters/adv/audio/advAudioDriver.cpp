@@ -63,7 +63,16 @@ void AudioOutput(void *) {
   }
 }
 
-void advAudioDriver::BufferNeeded() { instance_->OnNewBufferNeeded(); }
+void advAudioDriver::BufferNeeded() {
+  instance_->OnNewBufferNeeded();
+
+  // In offline render mode there is no SAI DMA IRQ to pace AudioThread, so
+  // self-give the semaphore to process the next buffer at CPU speed
+  // immediately.
+  if (instance_->offlineRendering_) {
+    xSemaphoreGive(core1_audio);
+  }
+}
 
 advAudioDriver::advAudioDriver(AudioSettings &settings)
     : AudioDriver(settings) {

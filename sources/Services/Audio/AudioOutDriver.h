@@ -29,6 +29,7 @@ public:
   virtual bool Start();
   virtual void Stop();
   void SetAudioActive(bool active) override;
+  void SetOfflineRendering(bool offline) override;
 
   virtual void Trigger();
 

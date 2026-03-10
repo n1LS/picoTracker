@@ -28,6 +28,7 @@ MixerService::MixerService() : master_(), sync_(platform_mutex()) {
   out_ = 0;
   project_ = NULL;
   master_.SetName("Master");
+  offlineRendering_ = false;
 };
 
 MixerService::~MixerService(){};
@@ -178,6 +179,11 @@ void MixerService::setRenderingMode(MixerServiceMode mode) {
     }
   }
 
+  offlineRendering_ =
+      (mode == MSM_FILE_OFFLINE || mode == MSM_FILESPLIT_OFFLINE);
+  if (out_)
+    out_->SetOfflineRendering(offlineRendering_);
+
   switch (mode) {
   case MSM_AUDIO:
     out_->EnableRendering(false);
@@ -189,6 +195,14 @@ void MixerService::setRenderingMode(MixerServiceMode mode) {
     out_->EnableRendering(true);
     break;
   case MSM_FILESPLIT:
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+      bus_[i].EnableRendering(true);
+    };
+    break;
+  case MSM_FILE_OFFLINE:
+    out_->EnableRendering(true);
+    break;
+  case MSM_FILESPLIT_OFFLINE:
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
       bus_[i].EnableRendering(true);
     };

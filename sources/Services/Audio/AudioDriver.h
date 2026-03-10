@@ -61,6 +61,11 @@ public:
 
   void OnNewBufferNeeded();
 
+  // Called by MixerService via AudioOut/AudioOutDriver when entering or
+  // leaving an offline render mode. Drives the pool bypass and the
+  // Core 1 self-pump in platform BufferNeeded() implementations.
+  void SetOfflineRendering(bool offline) { offlineRendering_ = offline; }
+
 protected:
   void eatBuffer(void *buffer, int size); // size in bytes
   void onAudioBufferTick();
@@ -69,6 +74,7 @@ protected:
 
 protected:
   bool isPlaying_;
+  bool offlineRendering_; // true while doing a faster-than-realtime file render
   static AudioBufferData pool_[SOUND_BUFFER_COUNT];
   int poolQueuePosition_;
   int poolPlayPosition_;

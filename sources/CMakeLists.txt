@@ -33,7 +33,7 @@ if (NOT ${ADV})
   # Pull in SDK (must be before project)
   include(pico_sdk_import.cmake)
 
-  project(picoTracker)
+  project(picoTracker C CXX ASM)
 
   if (PICO_SDK_VERSION_STRING VERSION_LESS "2.0.0")
     message(FATAL_ERROR "Raspberry Pi Pico SDK version 1.3.0 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
@@ -103,7 +103,7 @@ if (NOT ${ADV})
   )
 
   # Debug output with USB uses +6K memory
-  pico_enable_stdio_usb(${PROJECT_NAME} 0)
+  pico_enable_stdio_usb(${PROJECT_NAME} 1)
   pico_enable_stdio_uart(${PROJECT_NAME} 1)
   
   # This is the default, but better to make it explicit

@@ -41,6 +41,10 @@ void AudioOutDriver::SetAudioActive(bool active) {
   driver_->OnAudioActive(active);
 }
 
+void AudioOutDriver::SetOfflineRendering(bool offline) {
+  driver_->SetOfflineRendering(offline);
+}
+
 stereosample AudioOutDriver::GetLastPeakLevels() { return lastPeakVolume_; };
 
 void AudioOutDriver::Trigger() {

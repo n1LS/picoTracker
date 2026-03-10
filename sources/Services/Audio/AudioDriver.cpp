@@ -14,7 +14,10 @@
 
 AudioBufferData AudioDriver::pool_[SOUND_BUFFER_COUNT];
 
-AudioDriver::AudioDriver(AudioSettings &settings) { settings_ = settings; }
+AudioDriver::AudioDriver(AudioSettings &settings) {
+  settings_ = settings;
+  offlineRendering_ = false;
+}
 
 AudioDriver::~AudioDriver() {}
 
@@ -51,6 +54,13 @@ void AudioDriver::Stop() {
 }
 
 void AudioDriver::AddBuffer(short *buffer, int samplecount) {
+  // In offline render mode the mixed audio has already been written to the WAV
+  // file inside AudioMixer::Render(). There is no DAC to feed, so skip the
+  // DMA pool entirely. The DMA IRQ will keep looping on the mini-blank buffer;
+  // its sem_release() is harmless because the semaphore is already at max.
+  if (offlineRendering_)
+    return;
+
   int len = samplecount * 2 * sizeof(short);
 
   if (!isPlaying_)
