@@ -32,6 +32,7 @@
 #include "Adapters/picoTracker/platform/platform.h"
 #include "critical_error_message.h"
 #include "hardware/adc.h"
+#include "hardware/structs/watchdog.h"
 #include "pico/stdlib.h"
 
 EventManager *picoTrackerSystem::eventManager_ = NULL;
@@ -198,6 +199,13 @@ uint32_t picoTrackerSystem::GetRandomNumber() { return get_rand_32(); }
 void picoTrackerSystem::SystemBootloader() { platform_bootloader(); }
 
 void picoTrackerSystem::SystemReboot() { platform_reboot(); }
+
+void picoTrackerSystem::SystemMassStorage() {
+  // Write magic value to watchdog scratch register 5
+  // Scratch registers survive a watchdog reboot
+  watchdog_hw->scratch[5] = 0x4D534400; // "MSD\0"
+  platform_reboot();
+}
 
 uint32_t picoTrackerSystem::Micros() { return micros(); }
 

@@ -32,6 +32,7 @@ public: // System implementation
   virtual void PowerDown();
   virtual void SystemBootloader();
   virtual void SystemReboot();
+  virtual void SystemMassStorage();
   virtual void SystemPutChar(int c);
   virtual uint32_t GetRandomNumber();
   virtual uint32_t Micros();

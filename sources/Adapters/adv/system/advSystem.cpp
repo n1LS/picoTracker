@@ -187,6 +187,10 @@ void advSystem::SystemBootloader() { platform_bootloader(); }
 
 void advSystem::SystemReboot() { platform_reboot(); }
 
+void advSystem::SystemMassStorage() {
+  // MSD mode not supported on ADV platform
+}
+
 uint32_t advSystem::Micros() { return micros(); }
 
 uint32_t advSystem::Millis() { return millis(); }

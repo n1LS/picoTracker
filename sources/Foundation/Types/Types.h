@@ -262,6 +262,8 @@ struct FourCC {
     VarImportResampler = 185,
     ActionAutoSlice = 186,
     ActionShowRecordView = 187,
+    // 188 is taken for ActionMassStorage
+    ActionMassStorage = 188,
 
     Default = 255, // "    "
   };
