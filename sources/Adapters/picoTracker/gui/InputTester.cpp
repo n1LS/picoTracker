@@ -31,10 +31,6 @@ void drawInputTester() {
   // Read button state
   uint16_t keys = scanKeys();
 
-  // Title
-  chargfx_set_cursor(10, 2);
-  chargfx_print("Button Tester", false);
-
   // Row 1: Up, Play, Edit
   draw_button(13, 14, char_button_up, keys & KEY_UP);
   draw_button(16, 14, char_button_play, keys & KEY_START);
