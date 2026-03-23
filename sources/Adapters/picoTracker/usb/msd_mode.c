@@ -62,6 +62,21 @@ void msd_mode_run(void) {
 
   chargfx_draw_screen();
 
+  // Initialize SD card for MSD access before starting USB
+  extern bool msd_sd_init(void);
+  msd_sd_init();
+
+  // Initialize TinyUSB after all slow init (display, SD card) is done.
+  // This ensures tud_task() is called immediately in the loop below,
+  // allowing the USB host to enumerate the device without timeouts.
+  tusb_init();
+
+  // Wait for any residual key presses to be released before entering
+  // the main loop, so we don't immediately reboot out of MSD mode.
+  while (scanKeys()) {
+    tud_task();
+  }
+
   // Main MSD loop - service USB and poll for keypresses
   while (1) {
     tud_task();

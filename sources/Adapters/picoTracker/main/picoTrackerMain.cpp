@@ -30,9 +30,6 @@ int _getentropy(void *buffer, size_t length) { return -1; }
 #endif
 // ================
 
-// Defined in msd_scsi.cpp
-extern "C" bool msd_sd_init(void);
-
 int main(int argc, char *argv[]) {
 
   // Initialise microcontroller specific hardware
@@ -45,13 +42,10 @@ int main(int argc, char *argv[]) {
     // Need platform_init for GPIO (display, SD card, input buttons)
     platform_init();
 
-    // Initialize TinyUSB with MSD descriptors active
-    tusb_init();
-
-    // Initialize SD card for MSD access
-    msd_sd_init();
-
-    // Enter MSD mode loop - this never returns (reboots on keypress)
+    // Enter MSD mode - handles SD init, USB init, and main loop.
+    // tusb_init() is called inside msd_mode_run() after all slow
+    // initialization (display, SD card) so that tud_task() can be
+    // serviced immediately, allowing the USB host to enumerate the device.
     msd_mode_run();
   }
 
