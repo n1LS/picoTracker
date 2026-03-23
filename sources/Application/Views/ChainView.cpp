@@ -775,13 +775,15 @@ void ChainView::DrawView() {
   // Draw phrase title
   SetColor(CD_CONSOLE);
   char buffer[10];
+  sprintf(buffer, "Phrase %02X", phraseId);
+  DrawString(anchor._x + 12, anchor._y - 1, buffer, props);
 
   // Display notes
   unsigned char *note = viewData_->song_->phrase_.note_ + (16 * phraseId);
   unsigned char *instrData = viewData_->song_->phrase_.instr_ + (16 * phraseId);
 
   pos._y = anchor._y;
-  pos._x = anchor._x + 6;
+  pos._x = anchor._x + 12;
 
   unsigned char lastInstr = 0xFF;
   InstrumentBank *bank = viewData_->project_->GetInstrumentBank();
@@ -834,7 +836,7 @@ void ChainView::DrawView() {
 
   // Draw instruments
   pos._y = anchor._y;
-  pos._x = anchor._x + 10;
+  pos._x = anchor._x + 17;
 
   instrData = viewData_->song_->phrase_.instr_ + (16 * phraseId);
 
