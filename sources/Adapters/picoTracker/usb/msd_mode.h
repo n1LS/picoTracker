@@ -24,12 +24,12 @@ extern "C" {
 
 // Check if MSD mode was requested (via watchdog scratch register)
 // Clears the magic value so we don't get stuck in MSD mode
-bool msd_mode_requested(void);
+bool msd_mode_requested();
 
 // Run the MSD mode main loop - displays status on screen, services USB,
 // and reboots back to normal mode on any keypress.
 // This function never returns (it reboots the device).
-void msd_mode_run(void);
+void msd_mode_run();
 
 // Global flag indicating we are in MSD mode - used by USB descriptor
 // callbacks to return MSC-only descriptors instead of CDC+MIDI

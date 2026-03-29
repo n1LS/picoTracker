@@ -206,13 +206,12 @@ bool picoTrackerFileSystem::isParentRoot() {
 
   FsFile root;
   root.openRoot(sd.vol());
-  FsFile up;
-  up.open(1);
-  // check the index=1 entry, aka ".." if its firstSector  matches
-  // the root dirs firstSector, ie they are the same dir
-  bool result = root.firstSector() == up.firstSector();
+  FsBaseFile parent;
+  parent.open(&cwd, "..", O_READ);
+  // check if ".." points to root by comparing first sectors
+  bool result = root.firstSector() == parent.firstSector();
   root.close();
-  up.close();
+  parent.close();
   cwd.close();
   return result;
 }

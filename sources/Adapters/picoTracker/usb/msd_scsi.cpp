@@ -12,6 +12,7 @@
 
 #include "Adapters/picoTracker/sdcard/sdcard.h"
 #include "msd_mode.h"
+#include "pico/time.h"
 #include "tusb.h"
 #include <SdFat.h>
 #include <string.h>
@@ -19,6 +20,9 @@
 // SD card instance used exclusively in MSD mode
 static SdioCard msd_sd_card;
 static bool msd_sd_initialized = false;
+
+// Timestamp of last USB I/O activity (read or write callback)
+volatile uint32_t msd_last_io_time_us = 0;
 
 // Initialize the SD card for MSD mode
 // Called once before the USB loop starts
@@ -29,6 +33,60 @@ extern "C" bool msd_sd_init(void) {
     return true;
   }
   return false;
+}
+
+extern "C" uint32_t msd_sd_get_sector_count(void) {
+  if (msd_sd_initialized) {
+    return msd_sd_card.sectorCount();
+  }
+  return 0;
+}
+
+// Read the boot sector to extract FAT size info for mount time estimation.
+// Returns estimated total FAT+metadata sectors the host needs to read.
+// Handles both FAT32 (two FAT copies ~16MB on 64GB) and exFAT (one FAT ~2MB).
+extern "C" uint32_t msd_sd_get_fat_sectors(void) {
+  if (!msd_sd_initialized)
+    return 0;
+
+  uint8_t buf[512] __attribute__((aligned(4)));
+
+  // First read MBR (sector 0) to find partition start
+  if (!msd_sd_card.readSector(0, buf))
+    return 0;
+
+  // Check for MBR signature
+  uint32_t part_start = 0;
+  if (buf[510] == 0x55 && buf[511] == 0xAA && buf[450] != 0x00) {
+    // Read partition start LBA from first partition entry
+    part_start = (uint32_t)buf[454] | ((uint32_t)buf[455] << 8) |
+                 ((uint32_t)buf[456] << 16) | ((uint32_t)buf[457] << 24);
+  }
+
+  // Read the volume boot sector
+  if (!msd_sd_card.readSector(part_start, buf))
+    return 0;
+
+  // Detect exFAT by OEM Name field at offset 3 ("EXFAT   ")
+  if (memcmp(buf + 3, "EXFAT   ", 8) == 0) {
+    // exFAT VBR: ClusterCount at offset 76 (4 bytes)
+    // FAT is one copy, sized ClusterCount * 4 bytes
+    uint32_t cluster_count = (uint32_t)buf[76] | ((uint32_t)buf[77] << 8) |
+                             ((uint32_t)buf[78] << 16) |
+                             ((uint32_t)buf[79] << 24);
+    return (cluster_count * 4 + 511) / 512;
+  }
+
+  // FAT32 BPB: sectors per FAT at offset 36 (4 bytes)
+  uint32_t fat_size = (uint32_t)buf[36] | ((uint32_t)buf[37] << 8) |
+                      ((uint32_t)buf[38] << 16) | ((uint32_t)buf[39] << 24);
+  // Number of FATs at offset 16 (usually 2)
+  uint8_t num_fats = buf[16];
+  if (num_fats == 0)
+    num_fats = 2;
+
+  // Total sectors host needs to read: both FAT copies + some overhead
+  return fat_size * num_fats;
 }
 
 extern "C" {
@@ -71,14 +129,12 @@ void tud_msc_capacity_cb(uint8_t lun, uint32_t *block_count,
 }
 
 // Invoked when received an SCSI command not in the built-in list
-// Return negative value to indicate error e.g unsupported command
 int32_t tud_msc_scsi_cb(uint8_t lun, uint8_t const scsi_cmd[16], void *buffer,
                         uint16_t bufsize) {
   (void)lun;
   (void)buffer;
   (void)bufsize;
 
-  // We don't handle any additional SCSI commands
   tud_msc_set_sense(lun, SCSI_SENSE_ILLEGAL_REQUEST, 0x20, 0x00);
   return -1;
 }
@@ -94,13 +150,26 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset,
     return -1;
   }
 
-  uint32_t block_count = bufsize / 512;
-  if (block_count == 0) {
+  uint32_t num_sectors = bufsize / 512;
+  if (num_sectors == 0) {
     return -1;
   }
 
-  if (msd_sd_card.readSectors(lba, (uint8_t *)buffer, block_count)) {
-    return (int32_t)(block_count * 512);
+  // Read directly into the TinyUSB buffer.
+  // The buffer is 4-byte aligned and DMA write completes before
+  // TinyUSB initiates the USB transfer.
+  uint32_t bytes_to_read = num_sectors * 512;
+
+  bool ok;
+  if (num_sectors == 1) {
+    ok = msd_sd_card.readSector(lba, (uint8_t *)buffer);
+  } else {
+    ok = msd_sd_card.readSectors(lba, (uint8_t *)buffer, num_sectors);
+  }
+
+  if (ok) {
+    msd_last_io_time_us = time_us_32();
+    return (int32_t)bytes_to_read;
   }
 
   return -1;
@@ -117,13 +186,23 @@ int32_t tud_msc_write10_cb(uint8_t lun, uint32_t lba, uint32_t offset,
     return -1;
   }
 
-  uint32_t block_count = bufsize / 512;
-  if (block_count == 0) {
+  uint32_t num_sectors = bufsize / 512;
+  if (num_sectors == 0) {
     return -1;
   }
 
-  if (msd_sd_card.writeSectors(lba, buffer, block_count)) {
-    return (int32_t)(block_count * 512);
+  uint32_t bytes_to_write = num_sectors * 512;
+
+  bool ok;
+  if (num_sectors == 1) {
+    ok = msd_sd_card.writeSector(lba, (const uint8_t *)buffer);
+  } else {
+    ok = msd_sd_card.writeSectors(lba, (const uint8_t *)buffer, num_sectors);
+  }
+
+  if (ok) {
+    msd_last_io_time_us = time_us_32();
+    return (int32_t)bytes_to_write;
   }
 
   return -1;
