@@ -1,4 +1,5 @@
 add_subdirectory(main)
+add_subdirectory(bootloader)
 add_subdirectory(system)
 add_subdirectory(gui)
 add_subdirectory(timer)

@@ -29,6 +29,8 @@ include(pico_sdk_import.cmake)
 
 project(picoTracker)
 
+option(PICOTRACKER_SLOT_LINKED_APP "Build app for persistent-bootloader app slot" ON)
+
 if(PICO_SDK_VERSION_STRING VERSION_LESS "2.0.0")
   message(FATAL_ERROR "Raspberry Pi Pico SDK version 1.3.0 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
 endif()
@@ -70,6 +72,13 @@ add_subdirectory(sdk_bundle)
 
 add_subdirectory(Adapters/picoTracker)
 add_subdirectory(Externals/SdFat)
+
+if(PICOTRACKER_SLOT_LINKED_APP)
+  message(STATUS "Building picoTracker in single app-slot linked mode")
+  pico_set_linker_script(
+    picoTracker
+    ${CMAKE_CURRENT_SOURCE_DIR}/Adapters/picoTracker/bootloader/memmap_app_slot.ld)
+endif()
 
 set_property(TARGET picoTracker APPEND_STRING PROPERTY LINK_FLAGS "-Wl,--print-memory-usage")
 
