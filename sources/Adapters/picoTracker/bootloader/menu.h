@@ -20,7 +20,6 @@ struct Uf2FileEntry {
 
 void menu_show_message(const char *message, const char *message2 = nullptr);
 int menu_show_firmware_selection(void);
-void menu_show_write_progress(uint32_t current, uint32_t total);
 
 // Paint the title, static labels and the bottom key legend once. The screen
 // is cleared as part of this call. Call this exactly once at startup, after

@@ -44,7 +44,7 @@ for charCode in range(FIRST_CHAR, LAST_CHAR):
 
             bit = 0
 
-            if a > 0:
+            if r == g == b == 0:
                 bit = 1
 
             if bit:

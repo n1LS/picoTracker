@@ -14,17 +14,6 @@
 
 #define GLYPH(x) ((x)[0])
 
-/**
- * Display progress during firmware write
- *
- * @param current Current bytes written
- * @param total Total bytes to write
- */
-void menu_show_write_progress(uint32_t current, uint32_t total) {
-  (void)current;
-  (void)total;
-}
-
 int menu_show_firmware_selection(void) { return 0; }
 
 static void render_text(uint8_t x, uint8_t y, const char *s) {
@@ -240,6 +229,7 @@ void menu_show_message(const char *message, const char *message2) {
   while (*message)
     write_char(*message++);
   if (message2) {
+    write_char(' ');
     while (*message2)
       write_char(*message2++);
   }
