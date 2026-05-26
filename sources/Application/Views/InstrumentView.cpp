@@ -29,6 +29,9 @@
 #include <cstdint>
 #include <nanoprintf.h>
 
+static constexpr InstrumentType kMaxSelectableInstrumentType =
+    static_cast<InstrumentType>(IT_LAST - 1);
+
 InstrumentView::InstrumentView(GUIWindow &w, ViewData *data)
     : FieldView(w, data), instrumentType_(FourCC::VarInstrumentType,
                                           InstrumentTypeNames, IT_LAST, 0),
@@ -37,7 +40,8 @@ InstrumentView::InstrumentView(GUIWindow &w, ViewData *data)
 
   GUIPoint position = GUIPoint(5, 1);
   typeIntVarField_.emplace_back(position, *&instrumentType_, "Type: %s", 0,
-                                IT_LAST - 1, 1, 1);
+                                static_cast<int>(kMaxSelectableInstrumentType),
+                                1, 1);
   fieldList_.insert(fieldList_.end(), &(*typeIntVarField_.rbegin()));
   (*typeIntVarField_.rbegin()).AddObserver(*this);
   lastFocusID_ = FourCC::VarInstrumentType;
@@ -157,7 +161,7 @@ void InstrumentView::onInstrumentTypeChange(bool updateUI) {
     // Needed as the alternative is to change InstrumentTypeNames array plus all
     // switch instances which reference the types that wouldn't be available on
     // this platform
-#ifndef ADV
+
     // Show a dialog to the user
     char message[40];
     npf_snprintf(message, sizeof(message), "%s instruments exhausted!",
@@ -165,10 +169,11 @@ void InstrumentView::onInstrumentTypeChange(bool updateUI) {
     MessageBox *mb =
         MessageBox::Create(*this, message, "Trying next...", MBBF_OK);
     DoModal(mb);
-#endif
+
     // Try to find the next available instrument type
     bool found = false;
-    for (int i = nuType + 1; i < IT_LAST; i++) {
+    for (int i = nuType + 1;
+         i <= static_cast<int>(kMaxSelectableInstrumentType); i++) {
       InstrumentType nextType = (InstrumentType)i;
       result = bank->GetNextAndAssignID(nextType, id);
       if (result != NO_MORE_INSTRUMENT) {
@@ -358,7 +363,7 @@ void InstrumentView::fillSampleParameters() {
 
   GUIPoint actionPos = position;
   actionPos._x = baseX + 12;
-  sampleActionField_.emplace_back("adjust", FourCC::ActionShowSampleSlices,
+  sampleActionField_.emplace_back("Adjust", FourCC::ActionShowSampleSlices,
                                   actionPos);
   fieldList_.insert(fieldList_.end(), &sampleActionField_.back());
   sampleActionField_.back().AddObserver(*this);

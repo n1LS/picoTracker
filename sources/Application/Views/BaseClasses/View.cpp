@@ -331,11 +331,23 @@ void View::DoModal(ModalView *view, ModalViewCallback cb) {
 
 void View::DismissModal() {
   if (modalView_ && modalView_->IsFinished()) {
-    if (modalViewCallback_) {
-      modalViewCallback_(*this, *modalView_);
-    }
-    modalView_->Destroy();
+    ModalView *finishedModal = modalView_;
+    const uint32_t finishedModalId = finishedModal->GetInstanceId();
+    ModalViewCallback callback = modalViewCallback_;
+
+    // Clear current modal first so callback can safely open another modal.
     modalView_ = nullptr;
+    modalViewCallback_ = ModalViewCallback();
+
+    if (callback) {
+      callback(*this, *finishedModal);
+    }
+
+    // Callback may have already replaced this instance in shared storage.
+    if (finishedModal->GetInstanceId() == finishedModalId) {
+      finishedModal->Destroy();
+    }
+
     isDirty_ = true;
   }
 };
@@ -556,16 +568,40 @@ void View::drawPowerButtonUI(GUITextProperties &props) {
 }
 
 void View::switchToRecordView() {
-  // recording view only for the Advance
-#ifndef ADV
+  // recording view only not yet supported on pico
   return;
-#endif
-  if (!Player::GetInstance()->IsRunning()) {
-    RecordView::SetSourceViewType(viewType_);
-    SampleEditorView::SetSourceViewType(viewType_);
-    ViewType vt = VT_RECORD;
-    ViewEvent ve(VET_SWITCH_VIEW, &vt);
-    SetChanged();
-    NotifyObservers(&ve);
+
+  // if (!Player::GetInstance()->IsRunning()) {
+  //   RecordView::SetSourceViewType(viewType_);
+  //   SampleEditorView::SetSourceViewType(viewType_);
+  //   ViewType vt = VT_RECORD;
+  //   ViewEvent ve(VET_SWITCH_VIEW, &vt);
+  //   SetChanged();
+  //   NotifyObservers(&ve);
+  // }
+}
+
+void View::drawScrollBar(uint16_t x, uint16_t y, uint16_t height,
+                         uint16_t index, uint16_t total) {
+  if (total <= height) {
+    return; // no scrollbar needed
+  }
+
+  GUITextProperties props;
+  SetColor(CD_NORMAL);
+
+  // Thumb size represents the ratio of visible items to total items
+  uint16_t thumbSize = std::max(1, (height * height) / total);
+
+  // Thumb position: map topIndex (0 to maxScroll) onto available scrollbar
+  // space
+  uint16_t maxScroll = total - height;
+  uint16_t availableSpace = height - thumbSize;
+  uint16_t thumbPos = (index * availableSpace) / maxScroll;
+
+  for (int dy = 0; dy < height; dy++) {
+    bool thumb = (dy >= thumbPos) && (dy < thumbPos + thumbSize);
+    const char *str = thumb ? char_block_full_s : char_border_single_vertical_s;
+    DrawString(x, y + dy, str, props);
   }
 }

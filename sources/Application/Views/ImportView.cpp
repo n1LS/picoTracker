@@ -31,6 +31,22 @@
 // Initialize static member
 ViewType ImportView::sourceViewType_ = VT_PROJECT;
 
+namespace {
+enum ImportButton : uint8_t {
+  kImportButtonImport = 0,
+  kImportButtonEdit,
+  kImportButtonVolume,
+  kImportButtonCount,
+};
+
+enum ProjectPoolButton : uint8_t {
+  kProjectButtonEdit = 0,
+  kProjectButtonRemove,
+  kProjectButtonVolume,
+  kProjectPoolButtonCount,
+};
+} // namespace
+
 ImportView::ImportView(GUIWindow &w, ViewData *viewData)
     : ScreenView(w, viewData) {}
 
@@ -42,8 +58,11 @@ void ImportView::Reset() {
   previewPlayingIndex_ = 0;
   selectedButton_ = 0;
   toInstr_ = 0;
+  dirIndexStack_.clear();
   playKeyHeld_ = false;
   editKeyHeld_ = false;
+  enterKeyHeld_ = false;
+  pendingDirEnterOnRelease_ = false;
   inProjectSampleDir_ = false;
   fileIndexList_.clear();
 }
@@ -54,6 +73,28 @@ void ImportView::SetSourceViewType(ViewType vt) { sourceViewType_ = vt; }
 void ImportView::ProcessButtonMask(unsigned short mask, bool pressed) {
   // Check for key release events
   if (!pressed) {
+    // Open selected directory only when ENTER is released, unless ENTER was
+    // consumed by another action (e.g. volume edit).
+    if (enterKeyHeld_ && !(mask & EPBM_ENTER)) {
+      enterKeyHeld_ = false;
+      if (pendingDirEnterOnRelease_ && !fileIndexList_.empty()) {
+        auto fs = FileSystem::GetInstance();
+        unsigned fileIndex = fileIndexList_[currentIndex_];
+        if (fs->getFileType(fileIndex) == PFT_DIR) {
+          char name[PFILENAME_SIZE];
+          fs->getFileName(fileIndex, name, PFILENAME_SIZE);
+          if (strcmp(name, "..") == 0) {
+            goToParentDirectory(fs);
+          } else {
+            enterDirectory(fs, name);
+          }
+          isDirty_ = true;
+        }
+      }
+      pendingDirEnterOnRelease_ = false;
+      return;
+    }
+
     // Check if play key was released
     if (playKeyHeld_ && !(mask & EPBM_PLAY)) {
       // Play key no longer pressed so should stop playback
@@ -77,20 +118,27 @@ void ImportView::ProcessButtonMask(unsigned short mask, bool pressed) {
   // Handle key press events
   if (pressed) {
     auto fs = FileSystem::GetInstance();
+    const bool hasFiles = !fileIndexList_.empty();
 
     // EDIT+LEFT: go to parent directory within the import file browser.
     // NAV+LEFT remains reserved for leaving the ImportView entirely.
     if ((mask & EPBM_EDIT) && (mask & EPBM_LEFT) && !(mask & EPBM_NAV) &&
         !inProjectSampleDir_) {
-      setCurrentFolder(fs, "..");
+      goToParentDirectory(fs);
       isDirty_ = true;
-      topIndex_ = 0;
       return;
     }
 
-    unsigned fileIndex = fileIndexList_[currentIndex_];
+    if (mask & EPBM_EDIT) {
+      // Set flag to track that edit key is being held
+      editKeyHeld_ = true;
+    }
 
     if (mask & EPBM_PLAY) {
+      if (!hasFiles) {
+        return;
+      }
+      unsigned fileIndex = fileIndexList_[currentIndex_];
       char name[PFILENAME_SIZE];
       fs->getFileName(fileIndex, name, PFILENAME_SIZE);
 
@@ -107,56 +155,90 @@ void ImportView::ProcessButtonMask(unsigned short mask, bool pressed) {
       return; // We've handled the play button, so return
     }
 
-    // Handle EDIT+UP and EDIT+DOWN for preview volume adjustment
-    if (mask & EPBM_EDIT) {
-      // Set flag to track that edit key is being held
-      editKeyHeld_ = true;
-
-      if (mask & EPBM_UP) {
-        // EDIT+UP: Increase preview volume
-        adjustPreviewVolume(true);
-        return;
-      } else if (mask & EPBM_DOWN) {
-        // EDIT+DOWN: Decrease preview volume
-        adjustPreviewVolume(false);
-        return;
-      }
-    }
-
     if (mask & EPBM_NAV && mask & EPBM_EDIT) {
       // toggle from sdcard "import sample" & project pool listing
       if (inProjectSampleDir_) {
         inProjectSampleDir_ = false;
-        setCurrentFolder(fs, SAMPLES_LIB_DIR);
+        jumpToDirectory(fs, SAMPLES_LIB_DIR);
       } else {
         inProjectSampleDir_ = true;
-        setCurrentFolder(fs, PROJECT_SAMPLES_DIR);
+        jumpToDirectory(fs, PROJECT_SAMPLES_DIR);
       }
+      selectedButton_ = 0;
     }
 
     if (mask & EPBM_ENTER) {
+      if (!enterKeyHeld_) {
+        enterKeyHeld_ = true;
+        pendingDirEnterOnRelease_ = true;
+      }
+      if (mask & (EPBM_LEFT | EPBM_RIGHT | EPBM_UP | EPBM_DOWN)) {
+        pendingDirEnterOnRelease_ = false;
+      }
+
       if (inProjectSampleDir_) {
-        if (fileIndexList_.empty()) {
+        if (selectedButton_ == kProjectButtonVolume) {
+          int volumeOffset = 0;
+          if (mask & EPBM_LEFT) {
+            volumeOffset -= 1;
+          }
+          if (mask & EPBM_RIGHT) {
+            volumeOffset += 1;
+          }
+          if (mask & EPBM_DOWN) {
+            volumeOffset -= 5;
+          }
+          if (mask & EPBM_UP) {
+            volumeOffset += 5;
+          }
+          if (volumeOffset != 0) {
+            adjustPreviewVolume(volumeOffset);
+          }
+          return;
+        }
+        if (!hasFiles) {
+          pendingDirEnterOnRelease_ = false;
           return; // Do nothing if the list is empty
         }
-        // NOTE: the order of buttons in project pool is: edit, remove
-        // while in file browser its: import, edit
-        if (selectedButton_ == 0) {
+        if (selectedButton_ == kProjectButtonEdit) {
+          unsigned fileIndex = fileIndexList_[currentIndex_];
           char name[PFILENAME_SIZE];
           fs->getFileName(fileIndex, name, PFILENAME_SIZE);
-          showSampleEditor(name, false);
-        } else {
-#ifdef ADV
-          removeProjectSample(fileIndex, fs);
-#endif
+          showSampleEditor(name, true);
+        } else if (selectedButton_ == kProjectButtonRemove) {
+          // note yet supported on pico
         }
         return;
       }
+      if (selectedButton_ == kImportButtonVolume) {
+        int volumeOffset = 0;
+        if (mask & EPBM_LEFT) {
+          volumeOffset -= 1;
+        }
+        if (mask & EPBM_RIGHT) {
+          volumeOffset += 1;
+        }
+        if (mask & EPBM_DOWN) {
+          volumeOffset -= 5;
+        }
+        if (mask & EPBM_UP) {
+          volumeOffset += 5;
+        }
+        if (volumeOffset != 0) {
+          adjustPreviewVolume(volumeOffset);
+        }
+        return;
+      }
+      if (!hasFiles) {
+        pendingDirEnterOnRelease_ = false;
+        return;
+      }
+      unsigned fileIndex = fileIndexList_[currentIndex_];
       // we can't import or edit dirs!
       if (fs->getFileType(fileIndex) != PFT_DIR) {
-        if (selectedButton_ == 0) {
+        if (selectedButton_ == kImportButtonImport) {
           import();
-        } else {
+        } else if (selectedButton_ == kImportButtonEdit) {
           char name[PFILENAME_SIZE];
           fs->getFileName(fileIndex, name, PFILENAME_SIZE);
           showSampleEditor(name, false);
@@ -170,8 +252,14 @@ void ImportView::ProcessButtonMask(unsigned short mask, bool pressed) {
       if (inProjectSampleDir_ && fileIndexList_.empty()) {
         return; // Do nothing if the list is empty
       }
-      // toggle the selected button
-      selectedButton_ = (selectedButton_ == 0) ? 1 : 0;
+      uint8_t buttonCount = inProjectSampleDir_
+                                ? static_cast<uint8_t>(kProjectPoolButtonCount)
+                                : static_cast<uint8_t>(kImportButtonCount);
+      if (mask & EPBM_LEFT) {
+        selectedButton_ = (selectedButton_ + buttonCount - 1) % buttonCount;
+      } else {
+        selectedButton_ = (selectedButton_ + 1) % buttonCount;
+      }
       DrawView();
     }
   }
@@ -202,22 +290,21 @@ void ImportView::ProcessButtonMask(unsigned short mask, bool pressed) {
     return;
   } else {
     // A modifier
-    if (mask & EPBM_ENTER) {
-      auto fs = FileSystem::GetInstance();
-      unsigned fileIndex = fileIndexList_[currentIndex_];
-      char name[PFILENAME_SIZE];
-      fs->getFileName(fileIndex, name, PFILENAME_SIZE);
-      if (fs->getFileType(fileIndex) == PFT_DIR) {
-        setCurrentFolder(fs, name);
-        isDirty_ = true;
-        topIndex_ = 0; // need to reset when entering a dir as prev dir may
-                       // have been already scrolled down
-      }
-    }
   }
 };
 
 void ImportView::DrawView() {
+  if (fileIndexList_.empty()) {
+    return;
+  }
+  // ensure selected item is in visible range
+  const size_t pageSize = LIST_PAGE_SIZE;
+  if (currentIndex_ < topIndex_) {
+    topIndex_ = currentIndex_;
+  } else if (currentIndex_ >= topIndex_ + pageSize) {
+    topIndex_ = currentIndex_ - pageSize + 1;
+  }
+
   Clear();
 
   GUITextProperties props;
@@ -302,8 +389,22 @@ void ImportView::DrawView() {
 
   SetColor(CD_HILITE1);
   y = SCREEN_HEIGHT - 2;
+  if (inProjectSampleDir_) {
+    if (selectedButton_ < 0 || selectedButton_ >= kProjectPoolButtonCount) {
+      selectedButton_ = 0;
+    }
+  } else if (selectedButton_ < 0 || selectedButton_ >= kImportButtonCount) {
+    selectedButton_ = 0;
+  }
+
+  int previewVolume = 0;
+  Variable *v = viewData_->project_->FindVariable(FourCC::VarPreviewVolume);
+  if (v) {
+    previewVolume = v->GetInt();
+  }
+
   if (!inProjectSampleDir_) {
-    if (selectedButton_ == 0) {
+    if (selectedButton_ == kImportButtonImport) {
       SetColor(CD_HILITE2);
       props.invert_ = true;
     } else {
@@ -311,7 +412,7 @@ void ImportView::DrawView() {
       props.invert_ = false;
     }
     DrawString(x, y, "Import", props);
-    if (selectedButton_ == 1) {
+    if (selectedButton_ == kImportButtonEdit) {
       SetColor(CD_HILITE2);
       props.invert_ = true;
     } else {
@@ -319,6 +420,17 @@ void ImportView::DrawView() {
       props.invert_ = false;
     }
     DrawString(x + 10, y, "Edit", props);
+
+    if (selectedButton_ == kImportButtonVolume) {
+      SetColor(CD_HILITE2);
+      props.invert_ = true;
+    } else {
+      SetColor(CD_HILITE1);
+      props.invert_ = false;
+    }
+    char volField[12];
+    npf_snprintf(volField, sizeof(volField), "Vol:%2d", previewVolume);
+    DrawString(x + 23, y, volField, props);
   } else {
     if (fileIndexList_.empty()) {
       // draw this a few lines down from *top* of screen
@@ -326,9 +438,7 @@ void ImportView::DrawView() {
       props.invert_ = false;
       DrawString(2, 3, "[pool empty]", props);
     } else {
-      // we make edit the first button to make things easier because remove is
-      // only available for now on the Advance and even on Advance we dont want
-      // remove to be the default button
+      // we make edit the first button to make things easier
       if (selectedButton_ == 0) {
         SetColor(CD_HILITE2);
         props.invert_ = true;
@@ -344,50 +454,56 @@ void ImportView::DrawView() {
         SetColor(CD_HILITE1);
         props.invert_ = false;
       }
-#ifdef ADV
-      DrawString(x + 10, y, "Remove", props);
-#else
-      DrawString(x + 10, y, "N/A", props);
-#endif
+      DrawString(x + 9, y, "N/A", props);
+
+      if (selectedButton_ == kProjectButtonVolume) {
+        SetColor(CD_HILITE2);
+        props.invert_ = true;
+      } else {
+        SetColor(CD_HILITE1);
+        props.invert_ = false;
+      }
+      char volField[12];
+      npf_snprintf(volField, sizeof(volField), "vol:%2d", previewVolume);
+      DrawString(x + 23, y, volField, props);
     }
   }
   props.invert_ = false;
   y += 1;
 
-  // draw current selected file size, preview volume and single cycle indicator
+  // draw current selected file size and available storage indicator
   SetColor(CD_NORMAL);
   props.invert_ = true;
   y = 0;
   uint32_t filesize = 0;
-  auto currentFileIndex = fileIndexList_[currentIndex_];
-
-  // only get file size if it's a file not a dir
-  if (fs->getFileType(currentFileIndex) == PFT_FILE) {
-    filesize = fs->getFileSize(currentFileIndex);
-    // if file size is larger than available space, set color to warning
-    if (filesize > availableSpace) {
-      SetColor(CD_WARN);
+  if (!fileIndexList_.empty()) {
+    auto currentFileIndex = fileIndexList_[currentIndex_];
+    // only get file size if it's a file not a dir
+    if (fs->getFileType(currentFileIndex) == PFT_FILE) {
+      filesize = fs->getFileSize(currentFileIndex);
+      // if file size is larger than available space, set color to warning
+      if (filesize > availableSpace) {
+        SetColor(CD_WARN);
+      }
     }
-  }
-
-  // Get the current preview volume
-  int previewVolume = 0;
-  Variable *v = viewData_->project_->FindVariable(FourCC::VarPreviewVolume);
-  if (v) {
-    previewVolume = v->GetInt();
   }
 
   // Create a temporary buffer for formatting
   char tempBuffer[SCREEN_WIDTH];
   tempBuffer[SCREEN_WIDTH - 1] = '\0';
 
-  npf_snprintf(tempBuffer, sizeof(tempBuffer), "vol:%2d%% size:%i/%i",
-               previewVolume, filesize, availableSpace);
+  npf_snprintf(tempBuffer, sizeof(tempBuffer), "size:%i/%i", filesize,
+               availableSpace);
 
   // pad status line buffer with trailing space chars to ensure the invert
   // color is applied to entire line
-  npf_snprintf(tempBuffer, sizeof(tempBuffer), "%s%*s", tempBuffer,
-               SCREEN_WIDTH - strlen(tempBuffer), " ");
+  int32_t padWidth =
+      (SCREEN_WIDTH - 2) - static_cast<int32_t>(strlen(tempBuffer));
+  if (padWidth < 0) {
+    padWidth = 0;
+  }
+  npf_snprintf(tempBuffer, sizeof(tempBuffer), "%s%*s", tempBuffer, padWidth,
+               " ");
 
   x = 1;  // align with rest screen title & file list
   y = 23; // bottom line
@@ -399,6 +515,12 @@ void ImportView::DrawView() {
 void ImportView::OnPlayerUpdate(PlayerEventType, unsigned int tick){};
 
 void ImportView::OnFocus() {
+  // clear stale flags
+  enterKeyHeld_ = false;
+  pendingDirEnterOnRelease_ = false;
+  editKeyHeld_ = false;
+  playKeyHeld_ = false;
+
   auto fs = FileSystem::GetInstance();
 
   toInstr_ = viewData_->currentInstrumentID_;
@@ -407,9 +529,9 @@ void ImportView::OnFocus() {
 
   if (inProjectSampleDir_) {
     goProjectSamplesDir(viewData_);
-    setCurrentFolder(fs, ".");
+    jumpToDirectory(fs, ".");
   } else {
-    setCurrentFolder(fs, viewData_->importViewStartDir);
+    jumpToDirectory(fs, viewData_->importViewStartDir);
   }
 };
 
@@ -627,7 +749,7 @@ void ImportView::import() {
   isDirty_ = true;
 };
 
-void ImportView::adjustPreviewVolume(bool increase) {
+void ImportView::adjustPreviewVolume(int offset) {
   // Get the project instance
   Project *project = viewData_->project_;
 
@@ -638,15 +760,11 @@ void ImportView::adjustPreviewVolume(bool increase) {
     return;
   }
 
-  // Get current value
-  int currentVolume = v->GetInt();
+  // Get current value and apply offset
+  int newVolume = v->GetInt() + offset;
 
-  // Calculate new value (increase or decrease by 5)
-  int step = 5;
-  int newVolume = increase ? currentVolume + step : currentVolume - step;
-
-  // Clamp to valid range (0-100)
-  newVolume = newVolume > 100 ? 100 : newVolume;
+  // Clamp volume to valid 0-99 as per other channels
+  newVolume = newVolume > 99 ? 99 : newVolume;
   newVolume = newVolume < 0 ? 0 : newVolume;
 
   // Set the new value
@@ -656,40 +774,77 @@ void ImportView::adjustPreviewVolume(bool increase) {
   isDirty_ = true;
 }
 
-void ImportView::setCurrentFolder(FileSystem *fs, const char *name) {
-  // Special case: if we're trying to go up (..) from a top-level directory
-  if (strcmp(name, "..") == 0) {
-    // Check if we're in a top-level directory (parent is root)
-    if (fs->isParentRoot()) {
-      Trace::Log("PICOIMPORT",
-                 "Detected top-level directory, navigating to root");
-      // Navigate directly to root instead of using ".."
-      fs->chdir("/");
-    }
+bool ImportView::changeDirectory(FileSystem *fs, const char *name) {
+  if (strcmp(name, "..") == 0 && fs->isParentRoot()) {
+    Trace::Log("PICOIMPORT",
+               "Detected top-level directory, navigating to root");
+    return fs->chdir("/");
   }
 
-  // Normal directory navigation
   if (!fs->chdir(name)) {
     Trace::Error("FAILED to chdir to %s", name);
+    return false;
   }
-  currentIndex_ = 0;
-  refreshFileIndexList(fs);
+  return true;
+}
 
-  // Check if we're in the projects directory
-  // and if trying to go into the same dir as current project and if so dont
-  // allow it
+void ImportView::enterDirectory(FileSystem *fs, const char *name) {
   char projName[MAX_PROJECT_NAME_LENGTH + 1];
   viewData_->project_->GetProjectName(projName);
 
   if (strcmp(projName, name) == 0) {
-    // We just navigated to a current project directory, not allowed!
-    etl::string<MAX_PROJECT_SAMPLE_PATH_LENGTH> expectedPath(PROJECTS_DIR);
-    // so instead go back out into the projects dir
-    setCurrentFolder(fs, PROJECTS_DIR);
+    jumpToDirectory(fs, PROJECTS_DIR);
 
     Trace::Log("PICOIMPORT",
                "NOT allowed to browse into current project sample directory");
+    return;
   }
+
+  if (dirIndexStack_.full()) {
+    Trace::Error("ImportView directory stack overflow at depth %d",
+                 DirectoryIndexStackDepth);
+    char message[SCREEN_WIDTH];
+    npf_snprintf(message, sizeof(message), "Max depth is %d",
+                 DirectoryIndexStackDepth);
+    MessageBox *mb =
+        MessageBox::Create(*this, "Can't enter folder", message, MBBF_OK);
+    DoModal(mb);
+    return;
+  }
+
+  uint8_t savedIndex = static_cast<uint8_t>(currentIndex_);
+  if (!changeDirectory(fs, name)) {
+    return;
+  }
+
+  dirIndexStack_.push(savedIndex);
+  topIndex_ = 0;
+  currentIndex_ = 0;
+  refreshFileIndexList(fs);
+}
+
+void ImportView::goToParentDirectory(FileSystem *fs) {
+  if (!changeDirectory(fs, "..")) {
+    return;
+  }
+
+  currentIndex_ = dirIndexStack_.empty() ? 0 : dirIndexStack_.top();
+  if (!dirIndexStack_.empty()) {
+    dirIndexStack_.pop();
+  }
+
+  refreshFileIndexList(fs);
+}
+
+void ImportView::jumpToDirectory(FileSystem *fs, const char *name) {
+  if (!changeDirectory(fs, name)) {
+    return;
+  }
+
+  dirIndexStack_.clear();
+  topIndex_ = 0;
+  currentIndex_ = 0;
+  refreshFileIndexList(fs);
 }
 
 void ImportView::showSampleEditor(
@@ -697,6 +852,7 @@ void ImportView::showSampleEditor(
     bool isProjectSample) {
 
   viewData_->sampleEditorFilename = filename;
+  viewData_->isShowingSampleEditorProjectPool = isProjectSample;
 
   // before going to sample editor set this view as its "source" view
   SampleEditorView::sourceViewType_ = VT_IMPORT;
@@ -784,7 +940,10 @@ void ImportView::refreshFileIndexList(FileSystem *fs) {
     }
   }
 
-  if (currentIndex_ >= fileIndexList_.size()) {
-    currentIndex_ = fileIndexList_.empty() ? 0 : fileIndexList_.size() - 1;
+  if (fileIndexList_.empty()) {
+    topIndex_ = 0;
+    currentIndex_ = 0;
+  } else if (currentIndex_ >= fileIndexList_.size()) {
+    currentIndex_ = fileIndexList_.size() - 1;
   }
 }
