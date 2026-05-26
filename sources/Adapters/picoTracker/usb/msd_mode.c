@@ -79,42 +79,42 @@ static void msd_draw_box() {
 
   // Top row
   chargfx_set_cursor(x0, y0);
-  chargfx_putc(char_border_single_topLeft, false);
+  chargfx_putc(char_border_single_topLeft_s[0], false);
   for (int x = x0 + 1; x < x1; x++) {
     chargfx_set_cursor(x, y0);
-    chargfx_putc(char_border_single_horizontal, false);
+    chargfx_putc(char_border_single_horizontal_s[0], false);
   }
   chargfx_set_cursor(x1, y0);
-  chargfx_putc(char_border_single_topRight, false);
+  chargfx_putc(char_border_single_topRight_s[0], false);
 
   // Bottom row
   chargfx_set_cursor(x0, y1);
-  chargfx_putc(char_border_single_bottomLeft, false);
+  chargfx_putc(char_border_single_bottomLeft_s[0], false);
   for (int x = x0 + 1; x < x1; x++) {
     chargfx_set_cursor(x, y1);
-    chargfx_putc(char_border_single_horizontal, false);
+    chargfx_putc(char_border_single_horizontal_s[0], false);
   }
   chargfx_set_cursor(x1, y1);
-  chargfx_putc(char_border_single_bottomRight, false);
+  chargfx_putc(char_border_single_bottomRight_s[0], false);
 
   // Side borders
   for (int y = y0 + 1; y < y1; y++) {
     chargfx_set_cursor(x0, y);
-    chargfx_putc(char_border_single_vertical, false);
+    chargfx_putc(char_border_single_vertical_s[0], false);
     chargfx_set_cursor(x1, y);
-    chargfx_putc(char_border_single_vertical, false);
+    chargfx_putc(char_border_single_vertical_s[0], false);
   }
 
   // Separator under title (interior row 1)
   int sep_y = y0 + 2;
   chargfx_set_cursor(x0, sep_y);
-  chargfx_putc(char_border_single_verticalRight, false);
+  chargfx_putc(char_border_single_verticalRight_s[0], false);
   for (int x = x0 + 1; x < x1; x++) {
     chargfx_set_cursor(x, sep_y);
-    chargfx_putc(char_border_single_horizontal, false);
+    chargfx_putc(char_border_single_horizontal_s[0], false);
   }
   chargfx_set_cursor(x1, sep_y);
-  chargfx_putc(char_border_single_verticalLeft, false);
+  chargfx_putc(char_border_single_verticalLeft_s[0], false);
 }
 
 static void msd_draw_screen(const char *status) {
