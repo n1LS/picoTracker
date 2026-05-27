@@ -11,6 +11,7 @@
 #include "Adapters/picoTracker/platform/platform.h"
 #include "Adapters/picoTracker/sdcard/sdcard.h"
 #include "Externals/SdFat/src/SdFat.h"
+#include "bootlog.h"
 #include "bsp/board.h"
 #include "hardware/clocks.h"
 #include "hardware/pll.h"
@@ -51,6 +52,17 @@ static void uf2_to_firmware_bin_path(const char *uf2_path, char *out,
 
 static SdFs g_sd;
 bool auto_boot_armed = false;
+
+static void mark_uf2_failed(const char *uf2_path) {
+  char failed_path[80];
+  bl_copy_str(failed_path, sizeof(failed_path), uf2_path);
+  bl_append_str(failed_path, sizeof(failed_path), ".fail");
+
+  if (g_sd.exists(failed_path)) {
+    g_sd.remove(failed_path);
+  }
+  (void)g_sd.rename(uf2_path, failed_path);
+}
 
 static bool ensure_firmware_dir() {
   if (g_sd.exists(FIRMWARE_DIR)) {
@@ -191,7 +203,8 @@ static int scan_firmware_bins(Uf2FileEntry *entries, int capacity) {
 }
 
 // Import new UF2 files from SD root to /firmwares/*.bin if not already present.
-static void import_uf2_inbox(const Uf2FileEntry *inbox, int inbox_count) {
+static void import_uf2_to_firmwares(const Uf2FileEntry *inbox,
+                                    int inbox_count) {
   if (inbox_count <= 0) {
     return;
   }
@@ -202,29 +215,32 @@ static void import_uf2_inbox(const Uf2FileEntry *inbox, int inbox_count) {
   char bin_path[80];
   for (int i = 0; i < inbox_count; ++i) {
     uf2_to_firmware_bin_path(inbox[i].path, bin_path, sizeof(bin_path));
-    if (g_sd.exists(bin_path)) {
-      continue;
-    }
 
     menu_show_message("Converting", inbox[i].path);
     const int rc = parse_uf2_and_write_to_flash(inbox[i].path, APP_SLOT_ADDR,
                                                 bin_path, false);
     if (rc != 0) {
+      // on failure, remove the failed .bin (if any) and rename the .uf2 to
+      // .uf2.fail to prevent repeated failed import attempts.
       g_sd.remove(bin_path);
+      mark_uf2_failed(inbox[i].path);
+    } else {
+      // on success, remove the .uf2 from the inbox.
+      g_sd.remove(inbox[i].path);
     }
   }
 }
 
 static void report_app_boot_trace() {
-  // Trace::Log("BOOTLOADER", "BOOTDBG: wd_caused=%d scratch2=0x%08x
-  // scratch3=0x%08x", watchdog_caused_reboot() ? 1 : 0,
-  // watchdog_hw->scratch[2], watchdog_hw->scratch[3]);
+  bootlog("BOOTDBG: wd_caused=%d scratch2=0x%08x scratch3=0x%08x",
+          watchdog_caused_reboot() ? 1 : 0, watchdog_hw->scratch[2],
+          watchdog_hw->scratch[3]);
 
   if (watchdog_hw->scratch[2] != kAppBootTraceMagic) {
     return;
   }
   const uint32_t stage = watchdog_hw->scratch[3];
-  // Trace::Log("BOOTLOADER", "BOOTDBG: app-trace stage=0x%08x", stage);
+  bootlog("BOOTDBG: app-trace stage=0x%08x", stage);
 }
 
 static void stop_auto_boot() {
@@ -291,7 +307,7 @@ int main(int argc, char *argv[]) {
   int uf2_count = 0;
   if (sd_ready) {
     const int inbox_count = scan_uf2_files(uf2_files, kMaxUf2Files);
-    import_uf2_inbox(uf2_files, inbox_count);
+    import_uf2_to_firmwares(uf2_files, inbox_count);
 
     uf2_count = scan_firmware_bins(uf2_files, kMaxUf2Files);
     selected_file = 0;
@@ -337,15 +353,13 @@ int main(int argc, char *argv[]) {
 
     if ((pressed & KEY_UP) && uf2_count > 0) {
       selected_file = (selected_file - 1 + uf2_count) % uf2_count;
-      // Trace::Log("BOOTLOADER", "Selected UF2: %s",
-      // uf2_files[selected_file].path);
+      bootlog("Selected UF2: %s", uf2_files[selected_file].path);
       display_dirty = true;
     }
 
     if ((pressed & KEY_DOWN) && uf2_count > 0) {
       selected_file = (selected_file + 1) % uf2_count;
-      // Trace::Log("BOOTLOADER", "Selected UF2: %s",
-      // uf2_files[selected_file].path);
+      bootlog("Selected UF2: %s", uf2_files[selected_file].path);
       display_dirty = true;
     }
 
@@ -379,20 +393,19 @@ int main(int argc, char *argv[]) {
           sleep_ms(100);
           platform_reboot();
         } else {
-          menu_show_message("Flash failed. See serial log for details.");
+          menu_show_message("Flash failed. See bootloader.log");
         }
       }
     }
 
     if (pressed & KEY_ENTER) {
       menu_show_message("Booting app slot...");
-      // Trace::Log("BOOTLOADER", "BOOTDBG[%s]: handoff(manual) ->
-      // boot_firmware_slot(0x%08x)", kBootloaderBuildTag, APP_SLOT_ADDR);
+      bootlog("BOOTDBG[%s]: handoff(manual) -> boot_firmware_slot(0x%08x)",
+              kBootloaderBuildTag, APP_SLOT_ADDR);
       if (!boot_firmware_slot(APP_SLOT_ADDR)) {
         menu_show_message(
             "App-slot boot failed. Check flashed firmware image.");
-        // Trace::Log("BOOTLOADER", "BOOTDBG: handoff(manual) returned
-        // failure");
+        bootlog("BOOTDBG: handoff(manual) returned failure");
       }
     }
 

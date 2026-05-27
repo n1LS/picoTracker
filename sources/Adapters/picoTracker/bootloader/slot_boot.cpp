@@ -7,6 +7,7 @@
  */
 
 #include "slot_boot.h"
+#include "Adapters/picoTracker/bootloader/bootlog.h"
 #include "hardware/structs/nvic.h"
 #include "hardware/structs/scb.h"
 #include "hardware/structs/systick.h"
@@ -16,8 +17,6 @@
 #include <cstdio>
 
 namespace {
-static inline void bootlog(const char *fmt, ...) { (void)fmt; }
-
 constexpr uint32_t kVectorTableOffset = 0x100u;
 constexpr uint32_t kVectorTableOffsetMid = 0x110u;
 constexpr uint32_t kVectorTableOffsetAlt = 0x000u;

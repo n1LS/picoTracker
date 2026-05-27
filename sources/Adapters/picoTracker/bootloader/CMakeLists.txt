@@ -1,5 +1,6 @@
 add_executable(picoTrackerBootloader
   bootloader_main.cpp
+  bootlog.cpp
   uf2_parser.cpp
   flash_writer.cpp
   menu.cpp
