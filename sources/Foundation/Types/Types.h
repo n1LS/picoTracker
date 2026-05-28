@@ -265,6 +265,8 @@ struct FourCC {
     VarImportResampler = 185,
     ActionAutoSlice = 186,
     ActionShowRecordView = 187,
+    // 188 is taken for ActionMassStorage
+    ActionMassStorage = 188,
 
     ChiptuneInstrumentWaveform = 200,
     ChiptuneInstrumentAttack = 201,

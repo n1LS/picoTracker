@@ -32,6 +32,13 @@ static void BootselCallback(View &v, ModalView &dialog) {
   }
 };
 
+static void MassStorageCallback(View &v, ModalView &dialog) {
+  if (dialog.GetReturnCode() == MBL_YES) {
+    System *sys = System::GetInstance();
+    sys->SystemMassStorage();
+  }
+};
+
 DeviceView::DeviceView(GUIWindow &w, ViewData *data) : FieldView(w, data) {
 
   GUIPoint position = GetAnchor();
@@ -90,6 +97,13 @@ DeviceView::DeviceView(GUIWindow &w, ViewData *data) : FieldView(w, data) {
                             position);
   fieldList_.insert(fieldList_.end(), &(*actionField_.rbegin()));
   (*actionField_.rbegin()).AddObserver(*this);
+
+#ifndef ADV
+  position._y += 2;
+  actionField_.emplace_back("USB Storage", FourCC::ActionMassStorage, position);
+  fieldList_.insert(fieldList_.end(), &(*actionField_.rbegin()));
+  (*actionField_.rbegin()).AddObserver(*this);
+#endif
 }
 
 DeviceView::~DeviceView() {}
@@ -181,6 +195,17 @@ void DeviceView::Update(Observable &, I_ObservableData *data) {
       MessageBox *mb = MessageBox::Create(*this, "Reboot and lose changes?",
                                           MBBF_YES | MBBF_NO);
       DoModal(mb, ModalViewCallback::create<&BootselCallback>());
+    } else {
+      MessageBox *mb = MessageBox::Create(*this, "Not while playing", MBBF_OK);
+      DoModal(mb);
+    }
+    return;
+  }
+  case FourCC::ActionMassStorage: {
+    if (!player->IsRunning()) {
+      MessageBox *mb = MessageBox::Create(*this, "Reboot to USB storage?",
+                                          MBBF_YES | MBBF_NO);
+      DoModal(mb, ModalViewCallback::create<&MassStorageCallback>());
     } else {
       MessageBox *mb = MessageBox::Create(*this, "Not while playing", MBBF_OK);
       DoModal(mb);

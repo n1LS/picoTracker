@@ -8,6 +8,7 @@
 
 #include "Adapters/picoTracker/platform/platform.h"
 #include "Adapters/picoTracker/system/picoTrackerSystem.h"
+#include "Adapters/picoTracker/usb/msd_mode.h"
 #include "Application/Application.h"
 #include "bsp/board.h"
 #include "hardware/clocks.h"
@@ -34,7 +35,21 @@ int main(int argc, char *argv[]) {
   // Initialise microcontroller specific hardware
   board_init();
 
-  // Initialise TinyUSB
+  // Check if MSD mode was requested before previous reboot
+  if (msd_mode_requested()) {
+    g_msd_mode = true;
+
+    // Need platform_init for GPIO (display, SD card, input buttons)
+    platform_init();
+
+    // Enter MSD mode - handles SD init, USB init, and main loop.
+    // tusb_init() is called inside msd_mode_run() after all slow
+    // initialization (display, SD card) so that tud_task() can be
+    // serviced immediately, allowing the USB host to enumerate the device.
+    msd_mode_run();
+  }
+
+  // Normal mode: Initialise TinyUSB
   tusb_init();
 
   // Do remaining pT init, this needs to be done *after* above hardware and

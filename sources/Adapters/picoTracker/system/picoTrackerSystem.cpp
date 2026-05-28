@@ -19,6 +19,7 @@
 #include "hardware/gpio.h"
 #include "input.h"
 #include "pico/rand.h"
+#include "tusb.h"
 #include <assert.h>
 #include <fcntl.h>
 #include <memory.h>
@@ -32,6 +33,7 @@
 #include "Adapters/picoTracker/platform/platform.h"
 #include "critical_error_message.h"
 #include "hardware/adc.h"
+#include "hardware/structs/watchdog.h"
 #include "pico/stdlib.h"
 
 EventManager *picoTrackerSystem::eventManager_ = NULL;
@@ -44,12 +46,9 @@ int picoTrackerSystem::MainLoop() {
   return eventManager_->MainLoop();
 };
 
-enum SdCardStatus { SD_OK, SD_EXFAT, SD_MISSING };
+enum SdCardStatus { SD_OK, SD_MISSING };
 
 static SdCardStatus checkSDCard(FileSystem *fs) {
-  if (fs->isExFat()) {
-    return SD_EXFAT;
-  }
   if (!fs->chdir("/")) {
     return SD_MISSING;
   }
@@ -92,10 +91,7 @@ void picoTrackerSystem::Boot(int argc, char **argv) {
   // First check for SDCard
   auto fs = FileSystem::GetInstance();
   SdCardStatus sdStatus = checkSDCard(fs);
-  if (sdStatus == SD_EXFAT) {
-    Trace::Log("PICOTRACKERSYSTEM", "SDCARD exFAT not supported");
-    critical_error_message("unsupported sdcard", 0x01, pollForValidSDCard);
-  } else if (sdStatus == SD_MISSING || scanKeys()) {
+  if (sdStatus == SD_MISSING || scanKeys()) {
     Trace::Log("PICOTRACKERSYSTEM", "SDCARD MISSING!!");
     critical_error_message("SDCARD MISSING", 0x01, pollForValidSDCard);
   }
@@ -198,6 +194,21 @@ uint32_t picoTrackerSystem::GetRandomNumber() { return get_rand_32(); }
 void picoTrackerSystem::SystemBootloader() { platform_bootloader(); }
 
 void picoTrackerSystem::SystemReboot() { platform_reboot(); }
+
+void picoTrackerSystem::SystemMassStorage() {
+  // Write magic value to watchdog scratch register 5
+  // Scratch registers survive a watchdog reboot
+  watchdog_hw->scratch[5] = 0x4D534400; // "MSD\0"
+
+  // Disconnect USB cleanly before rebooting so the host detects the old
+  // (CDC+MIDI) device going away. Without this, the watchdog reboot
+  // is so fast that the host never sees a disconnect and won't
+  // re-enumerate the new MSC device after reboot.
+  tud_disconnect();
+  sleep_ms(1000);
+
+  platform_reboot();
+}
 
 uint32_t picoTrackerSystem::Micros() { return micros(); }
 
