@@ -47,6 +47,7 @@ struct FourCC {
     InstrumentCommandVibrato = 73,  // VIB
     InstrumentCommandNone = 45,     // ----
     InstrumentCommandMidiChord = 143,
+    InstrumentCommandVibrato = 73,
 
     SampleInstrumentCrushVolume = 3,
     SampleInstrumentVolume = 19,
